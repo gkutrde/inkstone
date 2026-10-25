@@ -1,0 +1,72 @@
+{
+  "$schema": "https://schema.tauri.app/config/2",
+  "productName": "Inkstone",
+  "version": "0.1.0",
+  "identifier": "com.inkstone.editor",
+  "build": {
+    "beforeDevCommand": "npm run dev",
+    "devUrl": "http://localhost:1420",
+    "beforeBuildCommand": "npm run build",
+    "frontendDist": "../dist"
+  },
+  "app": {
+    "windows": [
+      {
+        "title": "Inkstone",
+        "width": 1440,
+        "height": 900,
+        "minWidth": 980,
+        "minHeight": 640,
+        "center": true,
+        "resizable": true,
+        "fullscreen": false,
+        "decorations": false,
+        "transparent": true,
+        "noRedirectionBitmap": true,
+        "backgroundColor": "#00000000"
+      }
+    ],
+    "security": {
+      "csp": null,
+      "assetProtocol": {
+        "enable": true,
+        "scope": [
+          "**"
+        ]
+      }
+    }
+  },
+  "bundle": {
+    "active": true,
+    "targets": [
+      "nsis"
+    ],
+    "publisher": "Inkstone",
+    "copyright": "Copyright © 2026 Inkstone",
+    "category": "Productivity",
+    "shortDescription": "Local-first Markdown writing studio",
+    "longDescription": "Inkstone is a local-first Markdown writing workspace with a WYSIWYG editor, source mode, outline, autosave and DOCX/HTML export.",
+    "icon": [
+      "icons/32x32.png",
+      "icons/128x128.png",
+      "icons/icon.ico"
+    ],
+    "windows": {
+      "webviewInstallMode": {
+        "type": "downloadBootstrapper",
+        "silent": true
+      },
+      "nsis": {
+        "installMode": "currentUser",
+        "languages": [
+          "SimpChinese",
+          "English"
+        ],
+        "installerIcon": "icons/icon.ico",
+        "startMenuFolder": "Inkstone",
+        "installerHooks": "installer-hooks.nsh",
+        "template": "nsis-template.nsi"
+      }
+    }
+  }
+}

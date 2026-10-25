@@ -1,0 +1,50 @@
+{
+  "name": "inkstone",
+  "private": true,
+  "version": "0.1.0",
+  "description": "A local-first Markdown writing studio for Windows with Tauri, React and Rust.",
+  "license": "MIT",
+  "repository": {
+    "type": "git",
+    "url": "https://github.com/gkutrde/inkstone.git"
+  },
+  "homepage": "https://github.com/gkutrde/inkstone#readme",
+  "bugs": {
+    "url": "https://github.com/gkutrde/inkstone/issues"
+  },
+  "type": "module",
+  "scripts": {
+    "dev": "vite",
+    "build": "tsc && vite build",
+    "preview": "vite preview",
+    "tauri": "tauri"
+  },
+  "dependencies": {
+    "@codemirror/commands": "^6.11.1",
+    "@codemirror/lang-markdown": "^6.5.2",
+    "@codemirror/language": "^6.13.1",
+    "@codemirror/search": "^6.7.2",
+    "@codemirror/state": "^6.7.6",
+    "@codemirror/theme-one-dark": "^6.1.3",
+    "@codemirror/view": "^6.43.15",
+    "@milkdown/crepe": "^7.22.3",
+    "@milkdown/kit": "^7.22.3",
+    "@tauri-apps/api": "^2.12.4",
+    "@tauri-apps/plugin-dialog": "^2.8.3",
+    "@tauri-apps/plugin-opener": "^2.7.2",
+    "codemirror": "^6.0.2",
+    "docx": "^9.14.0",
+    "lucide-react": "^1.61.0",
+    "marked": "^18.1.1",
+    "react": "^19.3.1",
+    "react-dom": "^19.3.1"
+  },
+  "devDependencies": {
+    "@tauri-apps/cli": "^2.12.4",
+    "@types/react": "^19.3.0",
+    "@types/react-dom": "^19.3.0",
+    "@vitejs/plugin-react": "^6.1.2",
+    "typescript": "^7.0.2",
+    "vite": "^8.3.5"
+  }
+}

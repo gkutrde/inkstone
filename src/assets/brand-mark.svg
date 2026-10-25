@@ -1,0 +1,23 @@
+<svg xmlns="http://www.w3.org/2000/svg" width="128" height="128" viewBox="0 0 128 128">
+  <defs>
+    <linearGradient id="mark-bg" x1="16" y1="10" x2="112" y2="120" gradientUnits="userSpaceOnUse">
+      <stop offset="0" stop-color="#2d423b"/>
+      <stop offset="1" stop-color="#121c18"/>
+    </linearGradient>
+    <linearGradient id="mark-paper" x1="40" y1="26" x2="90" y2="108" gradientUnits="userSpaceOnUse">
+      <stop offset="0" stop-color="#fffdf5"/>
+      <stop offset="1" stop-color="#e8dfcb"/>
+    </linearGradient>
+    <linearGradient id="mark-seal" x1="84" y1="82" x2="108" y2="110" gradientUnits="userSpaceOnUse">
+      <stop offset="0" stop-color="#bb5941"/>
+      <stop offset="1" stop-color="#8a3221"/>
+    </linearGradient>
+  </defs>
+  <rect x="5" y="5" width="118" height="118" rx="30" fill="url(#mark-bg)"/>
+  <rect x="6.5" y="6.5" width="115" height="115" rx="28.5" fill="none" stroke="#fff" stroke-opacity="0.14" stroke-width="2"/>
+  <path d="M43 22H79L98 41V98C98 105 92 110 86 110H43C36 110 31 105 31 98V34C31 27 36 22 43 22Z" fill="url(#mark-paper)"/>
+  <path d="M79 22V34C79 38 82 41 86 41H98L79 22Z" fill="#d9cfba"/>
+  <path d="M64 43C74 53 77 66 72 78C68 88 58 93 50 87C41 81 41 69 47 59C51 51 57 46 64 43Z" fill="#17231e"/>
+  <rect x="80" y="80" width="27" height="27" rx="8" fill="url(#mark-seal)"/>
+  <path d="M86 88H101M86 94H101M86 100H101" stroke="#f8e9df" stroke-width="2.2" stroke-linecap="round"/>
+</svg>
