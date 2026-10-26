@@ -1,7 +1,7 @@
 {
   "name": "inkstone",
   "private": true,
-  "version": "0.1.0",
+  "version": "0.1.1",
   "description": "A local-first Markdown writing studio for Windows with Tauri, React and Rust.",
   "license": "MIT",
   "repository": {

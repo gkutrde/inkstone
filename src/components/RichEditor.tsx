@@ -9,6 +9,7 @@ import type { CSSProperties } from "react";
 import { ArrowDown, ArrowLeft, ArrowRight, ArrowUp } from "lucide-react";
 import { Crepe, CrepeFeature } from "@milkdown/crepe";
 import { editorViewCtx, serializerCtx } from "@milkdown/kit/core";
+import { insertImageInputRule } from "@milkdown/kit/preset/commonmark";
 import type { EditorView } from "@milkdown/kit/prose/view";
 import { getHTML, replaceAll } from "@milkdown/kit/utils";
 import { convertFileSrc, invoke } from "@tauri-apps/api/core";
@@ -16,6 +17,8 @@ import "@milkdown/crepe/theme/common/style.css";
 import "@milkdown/crepe/theme/classic.css";
 import { joinPath } from "../lib/path";
 import { saveImage } from "../lib/api";
+import { inkstoneImageBlockSchema, syncImageAltText } from "../lib/imageBlockSchema";
+import { autolinkInputRule, bareUrlInputRule, configureDoubleTildeOnly, enforceDoubleTildeInputRule, linkInputRule } from "../lib/markdownRules";
 import {
   getTableContext,
   handleTableKeyDown,
@@ -203,6 +206,7 @@ const RichEditor = forwardRef<RichEditorHandle, RichEditorProps>(function RichEd
     setLoading(true);
     setError(null);
     let liveView: EditorView | null = null;
+    let imageAltObserver: MutationObserver | null = null;
     let tableFrame = 0;
     let tableHintTimer = 0;
 
@@ -300,6 +304,14 @@ const RichEditor = forwardRef<RichEditorHandle, RichEditorProps>(function RichEd
         }
       }
     });
+    crepe.editor.config(configureDoubleTildeOnly);
+    // Register after Crepe's image feature so the compatible schema takes precedence.
+    crepe.editor.use(inkstoneImageBlockSchema);
+    // Typora-style immediate rendering for CommonMark links, images and autolinks.
+    crepe.editor.use(linkInputRule);
+    crepe.editor.use(autolinkInputRule);
+    crepe.editor.use(bareUrlInputRule);
+    crepe.editor.use(insertImageInputRule);
 
     const markInteraction = () => {
       userInteractedRef.current = true;
@@ -390,8 +402,14 @@ const RichEditor = forwardRef<RichEditorHandle, RichEditorProps>(function RichEd
       .create()
       .then(() => {
         if (disposed) return;
+        crepe.editor.action((ctx) => enforceDoubleTildeInputRule(ctx));
         readyRef.current = true;
         attachProbes(crepe);
+        imageAltObserver = new MutationObserver(() => {
+          if (liveView) syncImageAltText(liveView);
+        });
+        imageAltObserver.observe(root, { childList: true, subtree: true });
+        if (liveView) syncImageAltText(liveView);
         setLoading(false);
         scheduleTableBar();
         onReadyRef.current?.();
@@ -421,6 +439,8 @@ const RichEditor = forwardRef<RichEditorHandle, RichEditorProps>(function RichEd
       window.removeEventListener("resize", scheduleTableBar);
       if (tableFrame) window.cancelAnimationFrame(tableFrame);
       if (tableHintTimer) window.clearTimeout(tableHintTimer);
+      imageAltObserver?.disconnect();
+      imageAltObserver = null;
       refreshTableBarRef.current = () => undefined;
       setTableBar(null);
       setTableHint(null);
