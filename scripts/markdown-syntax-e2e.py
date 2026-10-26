@@ -250,8 +250,8 @@ def main() -> int:
         check("图片", "Markdown alt 替代文字", bool(image and image["alt"] == "内嵌图片"), image)
         caption = page.locator(".milkdown-image-block .caption-input").first
         check("图片", "Markdown title 图片标题", caption.count() == 1 and caption.input_value() == "像素图片标题", caption.input_value() if caption.count() else None)
-        legacy_image = next((node for node in snapshot["images"] if node["alt"] == "旧版缩放图片"), None)
-        check("图片", "旧版数字 alt 缩放兼容", bool(legacy_image and legacy_image["styleHeight"] == "0.75px"), legacy_image)
+        legacy_image = next((node for node in snapshot["images"] if node["alt"] == "0.75"), None)
+        check("图片", "数字 alt 保留且不误作缩放", bool(legacy_image and legacy_image["styleHeight"] == "1px"), legacy_image)
         inline_image = next((node for node in snapshot["images"] if node["alt"] == "行内图像"), None)
         check("图片", "段落内图片 alt/title", bool(inline_image and "image-inline" in inline_image["className"] and inline_image["title"] == "行内图片标题"), inline_image)
         reference_image = next((node for node in snapshot["images"] if node["alt"] == "引用式图片"), None)

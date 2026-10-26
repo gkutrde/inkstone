@@ -5,6 +5,7 @@ interface FindBarProps {
   query: string;
   replacement: string;
   matchCount: number;
+  focusSignal: number;
   onQueryChange: (value: string) => void;
   onReplacementChange: (value: string) => void;
   onNext: () => void;
@@ -17,6 +18,7 @@ export default function FindBar({
   query,
   replacement,
   matchCount,
+  focusSignal,
   onQueryChange,
   onReplacementChange,
   onNext,
@@ -29,7 +31,7 @@ export default function FindBar({
   useEffect(() => {
     inputRef.current?.focus();
     inputRef.current?.select();
-  }, []);
+  }, [focusSignal]);
 
   return (
     <div className="find-bar" role="dialog" aria-label="查找和替换">
@@ -46,7 +48,11 @@ export default function FindBar({
               if (event.shiftKey) onPrevious();
               else onNext();
             }
-            if (event.key === "Escape") onClose();
+            if (event.key === "Escape") {
+              event.preventDefault();
+              event.stopPropagation();
+              onClose();
+            }
           }}
         />
         <span className="find-count" aria-live="polite">{query ? matchCount + " 处" : "—"}</span>
@@ -67,7 +73,11 @@ export default function FindBar({
           aria-label="替换为"
           onChange={(event) => onReplacementChange(event.target.value)}
           onKeyDown={(event) => {
-            if (event.key === "Escape") onClose();
+            if (event.key === "Escape") {
+              event.preventDefault();
+              event.stopPropagation();
+              onClose();
+            }
             if (event.key === "Enter" && (event.ctrlKey || event.metaKey)) {
               event.preventDefault();
               onReplaceAll();

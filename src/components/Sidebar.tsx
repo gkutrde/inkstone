@@ -249,6 +249,7 @@ export default function Sidebar({
   };
 
   const handleTreeKeyDown = (event: React.KeyboardEvent) => {
+    if ((event.target as HTMLElement).closest("button, a, input")) return;
     const row = (event.target as HTMLElement).closest<HTMLElement>(".tree-row");
     if (!row || !visibleNodes.length) return;
     const path = row.dataset.path;
@@ -295,8 +296,11 @@ export default function Sidebar({
     event.preventDefault();
     event.stopPropagation();
     const mouse = event as React.MouseEvent;
-    const rect = (event.currentTarget as HTMLElement).getBoundingClientRect();
     const keyboard = !mouse.clientX && !mouse.clientY;
+    const focusedRow = keyboard
+      ? (document.activeElement as HTMLElement | null)?.closest<HTMLElement>(".tree-row")
+      : null;
+    const rect = (focusedRow ?? event.currentTarget as HTMLElement).getBoundingClientRect();
     const width = 220;
     const height = node.isDir ? 226 : 184;
     const x = keyboard ? rect.left : mouse.clientX;

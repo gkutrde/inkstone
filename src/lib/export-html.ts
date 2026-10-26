@@ -1,4 +1,5 @@
 import { marked } from "marked";
+import DOMPurify from "dompurify";
 import type { ThemeName } from "../types";
 import { dirName } from "./path";
 
@@ -17,7 +18,11 @@ const palettes: Record<ThemeName, Palette> = {
 };
 
 export function markdownToHtml(markdown: string): string {
-  return marked.parse(markdown, { gfm: true, breaks: false }) as string;
+  const rendered = marked.parse(markdown, { gfm: true, breaks: false }) as string;
+  return DOMPurify.sanitize(rendered, {
+    USE_PROFILES: { html: true },
+    FORBID_TAGS: ["script", "iframe", "object", "embed", "form"]
+  });
 }
 
 export function standaloneHtml(title: string, markdown: string, sourcePath: string | null, theme: ThemeName): string {
@@ -45,7 +50,7 @@ export function standaloneHtml(title: string, markdown: string, sourcePath: stri
     ".math-block, .katex-display { overflow-x: auto; }",
     "@media print { body { max-width: none; padding: 0; } }"
   ].join("\n");
-  return "<!doctype html>\n<html lang=\"zh-CN\">\n<head>\n<meta charset=\"utf-8\">\n<meta name=\"viewport\" content=\"width=device-width, initial-scale=1\">\n" + base + "\n<title>" + escapeHtml(title) + "</title>\n<style>\n" + css + "\n</style>\n</head>\n<body>\n" + body + "\n</body>\n</html>\n";
+  return "<!doctype html>\n<html lang=\"zh-CN\">\n<head>\n<meta charset=\"utf-8\">\n<meta name=\"viewport\" content=\"width=device-width, initial-scale=1\">\n<meta http-equiv=\"Content-Security-Policy\" content=\"default-src &apos;none&apos;; script-src &apos;none&apos;; img-src file: data: blob: http: https:; style-src &apos;unsafe-inline&apos;; font-src file: data:\">\n" + base + "\n<title>" + escapeHtml(title) + "</title>\n<style>\n" + css + "\n</style>\n</head>\n<body>\n" + body + "\n</body>\n</html>\n";
 }
 
 export function escapeHtml(value: string): string {

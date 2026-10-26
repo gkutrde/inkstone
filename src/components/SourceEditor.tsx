@@ -15,6 +15,8 @@ import type { ThemeName } from "../types";
 import { markInputStart, sinceModeSwitch } from "../lib/editorMetrics";
 
 export interface SourceEditorHandle {
+  getMarkdown: () => string | null;
+  hasPendingChanges: () => boolean;
   replaceAll: (value: string) => void;
   findNext: (query: string, backwards?: boolean) => boolean;
   scrollToLine: (line: number) => void;
@@ -26,7 +28,7 @@ interface SourceEditorProps {
   initialMarkdown: string;
   theme: ThemeName;
   fontSize: number;
-  onChange: (markdown: string) => void;
+  onDocChanged: (docSize: number, sampleText?: string) => void;
   onReady?: () => void;
 }
 
@@ -84,15 +86,16 @@ function nightTheme(fontSize: number) {
 }
 
 const SourceEditor = forwardRef<SourceEditorHandle, SourceEditorProps>(function SourceEditor(
-  { initialMarkdown, theme, fontSize, onChange, onReady },
+  { initialMarkdown, theme, fontSize, onDocChanged, onReady },
   ref
 ) {
   const hostRef = useRef<HTMLDivElement>(null);
   const viewRef = useRef<EditorView | null>(null);
   const themeCompartment = useRef(new Compartment());
-  const onChangeRef = useRef(onChange);
+  const onDocChangedRef = useRef(onDocChanged);
+  const docChangedRef = useRef(false);
   const onReadyRef = useRef(onReady);
-  onChangeRef.current = onChange;
+  onDocChangedRef.current = onDocChanged;
   onReadyRef.current = onReady;
 
   useEffect(() => {
@@ -100,13 +103,19 @@ const SourceEditor = forwardRef<SourceEditorHandle, SourceEditorProps>(function 
   }, []);
 
   useImperativeHandle(ref, () => ({
+    getMarkdown: () => {
+      const view = viewRef.current;
+      if (!view) return null;
+      docChangedRef.current = false;
+      return view.state.doc.toString();
+    },
+    hasPendingChanges: () => docChangedRef.current,
     replaceAll: (value: string) => {
       const view = viewRef.current;
       if (!view) return;
       view.dispatch({
         changes: { from: 0, to: view.state.doc.length, insert: value }
       });
-      onChangeRef.current(value);
     },
 
     findNext: (query: string, backwards = false) => {
@@ -159,7 +168,12 @@ const SourceEditor = forwardRef<SourceEditorHandle, SourceEditorProps>(function 
           themeCompartment.current.of(theme === "night" ? nightTheme(fontSize) : lightTheme(fontSize)),
           keymap.of([...defaultKeymap, ...historyKeymap, ...searchKeymap, indentWithTab]),
           EditorView.updateListener.of((update) => {
-            if (update.docChanged) onChangeRef.current(update.state.doc.toString());
+            if (!update.docChanged) return;
+            docChangedRef.current = true;
+            onDocChangedRef.current(
+              update.state.doc.length,
+              update.state.doc.sliceString(0, Math.min(4000, update.state.doc.length))
+            );
           })
         ]
       }),

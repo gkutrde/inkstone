@@ -7,17 +7,33 @@ import {
 } from "react";
 import type { CSSProperties } from "react";
 import { ArrowDown, ArrowLeft, ArrowRight, ArrowUp } from "lucide-react";
-import { Crepe, CrepeFeature } from "@milkdown/crepe";
-import { editorViewCtx, serializerCtx } from "@milkdown/kit/core";
+import { CrepeBuilder } from "@milkdown/crepe/builder";
+import { blockEdit } from "@milkdown/crepe/feature/block-edit";
+import { codeMirror } from "@milkdown/crepe/feature/code-mirror";
+import { cursor } from "@milkdown/crepe/feature/cursor";
+import { imageBlock } from "@milkdown/crepe/feature/image-block";
+import { linkTooltip } from "@milkdown/crepe/feature/link-tooltip";
+import { listItem } from "@milkdown/crepe/feature/list-item";
+import { placeholder } from "@milkdown/crepe/feature/placeholder";
+import { table } from "@milkdown/crepe/feature/table";
+import { toolbar } from "@milkdown/crepe/feature/toolbar";
+import { oneDark } from "@codemirror/theme-one-dark";
+import { languages } from "@codemirror/language-data";
+import { latex as lazyLatex } from "../lib/lazyLatex";
+import { editorViewCtx, remarkCtx, schemaCtx, serializerCtx } from "@milkdown/kit/core";
 import { insertImageInputRule } from "@milkdown/kit/preset/commonmark";
+import { TextSelection } from "@milkdown/kit/prose/state";
 import type { EditorView } from "@milkdown/kit/prose/view";
 import { getHTML, replaceAll } from "@milkdown/kit/utils";
 import { convertFileSrc, invoke } from "@tauri-apps/api/core";
 import "@milkdown/crepe/theme/common/style.css";
 import "@milkdown/crepe/theme/classic.css";
-import { joinPath } from "../lib/path";
+import { documentAssetPath, markdownAssetPath } from "../lib/path";
+import { restoreFrontmatter, splitFrontmatter } from "../lib/frontmatter";
 import { saveImage } from "../lib/api";
 import { inkstoneImageBlockSchema, syncImageAltText } from "../lib/imageBlockSchema";
+import { definitionSchema, imageReferenceSchema, installReferencePreservingRemark, linkReferenceSchema, syncReferenceDocument } from "../lib/referenceSchema";
+import { createMarkdownSnapshotCache } from "../lib/markdownSnapshot";
 import { autolinkInputRule, bareUrlInputRule, configureDoubleTildeOnly, enforceDoubleTildeInputRule, linkInputRule } from "../lib/markdownRules";
 import {
   getTableContext,
@@ -29,6 +45,7 @@ import {
   markInputStart,
   markTransaction,
   metricsEnabled,
+  record,
   registerSerializeProbe,
   sinceInput,
   sinceModeSwitch,
@@ -38,13 +55,15 @@ import {
 
 export interface RichEditorHandle {
   getHtml: () => string;
-  /** Serializes the live document on demand; null when the editor is not ready. */
-  getMarkdown: () => string | null;
+  /** Serializes the live document on demand; explicit flushes may include settled IME text. */
+  getMarkdown: (allowComposing?: boolean) => string | null;
   /** The Markdown this instance was mounted with (used to detect stale peers). */
   getInitialMarkdown: () => string;
   /** True when the live doc differs from the last getMarkdown() result. */
   hasPendingChanges: () => boolean;
-  replaceContent: (markdown: string) => void;
+  replaceContent: (markdown: string, resetHistory?: boolean) => void;
+  countMatches: (query: string) => number;
+  findNext: (query: string, backwards?: boolean) => boolean;
   focus: () => void;
   scrollToHeading: (index: number) => boolean;
 }
@@ -60,8 +79,8 @@ interface RichEditorProps {
   workspace: string | null;
   documentPath: string | null;
   onChange: (markdown: string) => void;
-  /** Fired after a document change settles; carries the ProseMirror doc size. */
-  onDocChanged?: (docSize: number) => void;
+  /** Fired after a document change settles; carries size and a costing sample. */
+  onDocChanged?: (docSize: number, sampleText?: string) => void;
   onReady?: () => void;
   onUseSource?: () => void;
 }
@@ -75,12 +94,48 @@ async function fileToDataUrl(file: File): Promise<string> {
   });
 }
 
+interface TextMatch { from: number; to: number }
+
+function findTextMatches(view: EditorView, query: string): TextMatch[] {
+  if (!query) return [];
+  const needle = query.toLocaleLowerCase();
+  const segments: { docPos: number; searchPos: number; length: number }[] = [];
+  let searchable = "";
+  view.state.doc.descendants((node, pos) => {
+    if (!node.isText) return;
+    const value = node.text ?? "";
+    const previous = segments[segments.length - 1];
+    const contiguous = previous && previous.docPos + previous.length === pos;
+    if (!contiguous) searchable += "\u0000";
+    segments.push({ docPos: pos, searchPos: searchable.length, length: value.length });
+    searchable += value;
+  });
+  const haystack = searchable.toLocaleLowerCase();
+  const matches: TextMatch[] = [];
+  let index = 0;
+  while (index < haystack.length) {
+    const found = haystack.indexOf(needle, index);
+    if (found < 0) break;
+    const end = found + needle.length;
+    const first = segments.find((segment) => found >= segment.searchPos && found < segment.searchPos + segment.length);
+    const last = segments.find((segment) => end - 1 >= segment.searchPos && end - 1 < segment.searchPos + segment.length);
+    if (first && last) {
+      matches.push({
+        from: first.docPos + found - first.searchPos,
+        to: last.docPos + end - last.searchPos
+      });
+    }
+    index = found + Math.max(1, needle.length);
+  }
+  return matches;
+}
+
 const RichEditor = forwardRef<RichEditorHandle, RichEditorProps>(function RichEditor(
   { initialMarkdown, workspace, documentPath, onChange, onDocChanged, onReady, onUseSource },
   ref
 ) {
   const rootRef = useRef<HTMLDivElement>(null);
-  const crepeRef = useRef<Crepe | null>(null);
+  const crepeRef = useRef<CrepeBuilder | null>(null);
   const readyRef = useRef(false);
   const userInteractedRef = useRef(false);
   const composingRef = useRef(false);
@@ -88,7 +143,11 @@ const RichEditor = forwardRef<RichEditorHandle, RichEditorProps>(function RichEd
   // getMarkdown(). This is the exact "is there unsaved editor state?" signal;
   // the 200 ms debounce notification is too late for a switch/close race.
   const docChangedSinceSnapshotRef = useRef(false);
+  const snapshotCacheRef = useRef(createMarkdownSnapshotCache());
   const initialMarkdownRef = useRef(initialMarkdown);
+  const initialPartsRef = useRef(splitFrontmatter(initialMarkdown));
+  const frontmatterRef = useRef(initialPartsRef.current.prefix);
+  const [frontmatterKind, setFrontmatterKind] = useState(initialPartsRef.current.kind);
   const onReadyRef = useRef(onReady);
   const onChangeRef = useRef(onChange);
   const onDocChangedRef = useRef(onDocChanged);
@@ -100,7 +159,13 @@ const RichEditor = forwardRef<RichEditorHandle, RichEditorProps>(function RichEd
   const [tableBar, setTableBar] = useState<TableBarState | null>(null);
   const [tableHint, setTableHint] = useState<string | null>(null);
   const tableBarRef = useRef<HTMLDivElement>(null);
+  const liveViewRef = useRef<EditorView | null>(null);
   const refreshTableBarRef = useRef<() => void>(() => undefined);
+  const commitTableBar = (next: TableBarState | null) => {
+    setTableBar((current) => current === next || (current && next &&
+      current.top === next.top && current.left === next.left &&
+      current.canInsertRowBefore === next.canInsertRowBefore) ? current : next);
+  };
 
   useEffect(() => {
     sinceModeSwitch("mode_switch_chunk_ready");
@@ -119,30 +184,49 @@ const RichEditor = forwardRef<RichEditorHandle, RichEditorProps>(function RichEd
     },
     getInitialMarkdown: () => initialMarkdownRef.current,
     hasPendingChanges: () => docChangedSinceSnapshotRef.current,
-    getMarkdown: () => {
+    getMarkdown: (allowComposing = false) => {
       // Never hand back "" for a failed read: callers use null to mean
       // "keep whatever snapshot you already have".
       if (!crepeRef.current || !readyRef.current) return null;
       // A half-converted IME composition must never reach disk or an export.
-      if (composingRef.current) return null;
+      if (composingRef.current && !allowComposing) return null;
       try {
         const markdown = crepeRef.current.editor.action((ctx) =>
-          ctx.get(serializerCtx)(ctx.get(editorViewCtx).state.doc)
+          snapshotCacheRef.current.serialize(ctx.get(schemaCtx), ctx.get(remarkCtx), ctx.get(editorViewCtx).state.doc)
         );
         docChangedSinceSnapshotRef.current = false;
-        return markdown;
+        return restoreFrontmatter(frontmatterRef.current, markdown);
       } catch {
         return null;
       }
     },
-    replaceContent: (markdown: string) => {
+    replaceContent: (markdown: string, resetHistory = true) => {
       if (!crepeRef.current) return;
-      // A mode switch must not pile full-document entries into the undo stack:
-      // that grew the heap by ~25 MB/min under repeated switches. Rebuilding the
-      // state clears the history and lets the old document be collected.
-      crepeRef.current.editor.action(replaceAll(markdown, true));
-      docChangedSinceSnapshotRef.current = false;
+      const parts = splitFrontmatter(markdown);
+      frontmatterRef.current = parts.prefix;
+      setFrontmatterKind(parts.kind);
+      userInteractedRef.current = true;
+      // Only cross-editor rebuilds reset history. User edits stay one undoable step.
+      crepeRef.current.editor.action(replaceAll(parts.body, resetHistory));
+      docChangedSinceSnapshotRef.current = !resetHistory;
       onChangeRef.current(markdown);
+    },
+    countMatches: (query: string) => {
+      const view = liveViewRef.current;
+      return view ? findTextMatches(view, query).length : 0;
+    },
+    findNext: (query: string, backwards = false) => {
+      const view = liveViewRef.current;
+      if (!view || !query) return false;
+      const matches = findTextMatches(view, query);
+      if (!matches.length) return false;
+      const selection = view.state.selection;
+      const match = backwards
+        ? [...matches].reverse().find((item) => item.from < selection.from) ?? matches[matches.length - 1]
+        : matches.find((item) => item.from >= selection.to) ?? matches[0];
+      view.dispatch(view.state.tr.setSelection(TextSelection.create(view.state.doc, match.from, match.to)).scrollIntoView());
+      view.focus();
+      return true;
     },
     focus: () => {
       const view = rootRef.current?.querySelector(".ProseMirror") as HTMLElement | null;
@@ -160,17 +244,20 @@ const RichEditor = forwardRef<RichEditorHandle, RichEditorProps>(function RichEd
   }));
 
   useEffect(() => {
-    const attachProbes = (crepe: Crepe) => {
+    const attachProbes = (crepe: CrepeBuilder) => {
       // Track doc changes synchronously for the flush decision; metrics are
       // optional on top of that.
       const view = crepe.editor.action((ctx) => ctx.get(editorViewCtx));
       liveView = view;
+      liveViewRef.current = view;
       const originalDispatch = view.dispatch.bind(view);
       view.dispatch = (transaction) => {
+        if (transaction.getMeta("inkstoneReferenceSync")) return originalDispatch(transaction);
         if (transaction.docChanged) docChangedSinceSnapshotRef.current = true;
         markTransaction();
         try {
           const result = originalDispatch(transaction);
+          syncReferenceDocument(view);
           scheduleTableBar();
           return result;
         } catch (error) {
@@ -184,18 +271,25 @@ const RichEditor = forwardRef<RichEditorHandle, RichEditorProps>(function RichEd
           throw error;
         }
       };
+      syncReferenceDocument(view);
       if (!metricsEnabled) return;
       registerSerializeProbe(() => {
+        let full = "";
         timeSync(
           "markdown_serialize",
           () => {
-            crepe.editor.action((ctx) => {
-              const doc = ctx.get(editorViewCtx).state.doc;
-              ctx.get(serializerCtx)(doc);
-            });
+            full = crepe.editor.action((ctx) => ctx.get(serializerCtx)(ctx.get(editorViewCtx).state.doc));
           },
           { docSize: view.state.doc.content.size }
         );
+        const incremental = timeSync(
+          "markdown_incremental",
+          () => crepe.editor.action((ctx) =>
+            snapshotCacheRef.current.serialize(ctx.get(schemaCtx), ctx.get(remarkCtx), ctx.get(editorViewCtx).state.doc)
+          ),
+          { docSize: view.state.doc.content.size }
+        );
+        record("snapshot_parity_mismatch", full === incremental ? 0 : 1, { docSize: view.state.doc.content.size });
       });
     };
 
@@ -209,6 +303,22 @@ const RichEditor = forwardRef<RichEditorHandle, RichEditorProps>(function RichEd
     let imageAltObserver: MutationObserver | null = null;
     let tableFrame = 0;
     let tableHintTimer = 0;
+    let prewarmTimer = 0;
+    let prewarmIdleId: number | null = null;
+    const schedulePrewarm = () => {
+      const run = () => {
+        prewarmIdleId = null;
+        prewarmTimer = 0;
+        if (disposed) return;
+        const done = crepe.editor.action((ctx) =>
+          snapshotCacheRef.current.prewarm(ctx.get(schemaCtx), ctx.get(remarkCtx), ctx.get(editorViewCtx).state.doc, 4)
+        );
+        if (!done) schedulePrewarm();
+      };
+      const requestIdle = window.requestIdleCallback;
+      if (requestIdle) prewarmIdleId = requestIdle(run, { timeout: 120 });
+      else prewarmTimer = window.setTimeout(run, 16);
+    };
 
     const showTableHint = (message: string) => {
       setTableHint(message);
@@ -218,12 +328,12 @@ const RichEditor = forwardRef<RichEditorHandle, RichEditorProps>(function RichEd
 
     const updateTableBar = () => {
       if (!liveView) {
-        setTableBar(null);
+        commitTableBar(null);
         return;
       }
       const context = getTableContext(liveView.state);
       if (!context) {
-        setTableBar(null);
+        commitTableBar(null);
         return;
       }
       try {
@@ -233,7 +343,7 @@ const RichEditor = forwardRef<RichEditorHandle, RichEditorProps>(function RichEd
           : null;
         const tableElement = cellElement?.closest(".milkdown-table-block") as HTMLElement | null;
         if (!cellElement || !tableElement) {
-          setTableBar(null);
+          commitTableBar(null);
           return;
         }
         tableElement.querySelectorAll<HTMLButtonElement>('[data-role="row-drag-handle"] .button-group button').forEach((button) => {
@@ -245,7 +355,7 @@ const RichEditor = forwardRef<RichEditorHandle, RichEditorProps>(function RichEd
         const tableRect = tableElement.getBoundingClientRect();
         const toolbarHeight = 34;
         const toolbarWidth = 232;
-        const minTop = 94;
+        const minTop = Number.parseFloat(getComputedStyle(root).getPropertyValue("--h-chrome")) + 10 || 148;
         let top = tableRect.top - toolbarHeight - 10;
         if (top < minTop) top = tableRect.bottom + 10;
         top = Math.max(8, Math.min(top, window.innerHeight - toolbarHeight - 8));
@@ -253,9 +363,9 @@ const RichEditor = forwardRef<RichEditorHandle, RichEditorProps>(function RichEd
           8,
           Math.min(tableRect.left + tableRect.width / 2 - toolbarWidth / 2, window.innerWidth - toolbarWidth - 8)
         );
-        setTableBar({ top, left, canInsertRowBefore: context.rowIndex > 0 });
+        commitTableBar({ top, left, canInsertRowBefore: context.rowIndex > 0 });
       } catch {
-        setTableBar(null);
+        commitTableBar(null);
       }
     };
 
@@ -272,7 +382,8 @@ const RichEditor = forwardRef<RichEditorHandle, RichEditorProps>(function RichEd
       const activeWorkspace = workspaceRef.current;
       if (!activeWorkspace) return fileToDataUrl(file);
       const bytes = Array.from(new Uint8Array(await file.arrayBuffer()));
-      return saveImage(activeWorkspace, file.name, bytes);
+      const saved = await saveImage(activeWorkspace, file.name, bytes);
+      return markdownAssetPath(documentPathRef.current, activeWorkspace, saved);
     };
 
     const proxyImage = (url: string): string => {
@@ -280,33 +391,38 @@ const RichEditor = forwardRef<RichEditorHandle, RichEditorProps>(function RichEd
       if (/^(https?:|data:|blob:|asset:|file:)/i.test(url)) return url;
       const activeWorkspace = workspaceRef.current;
       if (!activeWorkspace) return url;
-      if (!documentPathRef.current) return url;
-      return convertFileSrc(joinPath(activeWorkspace, decodeURIComponent(url)));
+      return convertFileSrc(documentAssetPath(documentPathRef.current, activeWorkspace, url));
     };
 
-    const crepe = new Crepe({
+    installReferencePreservingRemark();
+    const crepe = new CrepeBuilder({
       root,
-      defaultValue: initialMarkdownRef.current,
-      features: {
-        [CrepeFeature.AI]: false,
-        [CrepeFeature.TopBar]: false
-      },
-      featureConfigs: {
-        [CrepeFeature.Placeholder]: {
-          text: "从这里开始写。输入 / 可以打开块菜单。",
-          mode: "doc"
-        },
-        [CrepeFeature.ImageBlock]: {
-          onUpload: uploadImage,
-          blockOnUpload: uploadImage,
-          inlineOnUpload: uploadImage,
-          proxyDomURL: proxyImage
-        }
-      }
-    });
+      defaultValue: initialPartsRef.current.body
+    })
+      .addFeature(cursor)
+      .addFeature(listItem)
+      .addFeature(linkTooltip)
+      .addFeature(imageBlock, {
+        onUpload: uploadImage,
+        blockOnUpload: uploadImage,
+        inlineOnUpload: uploadImage,
+        proxyDomURL: proxyImage
+      })
+      .addFeature(blockEdit)
+      .addFeature(placeholder, {
+        text: "从这里开始写。输入 / 可以打开块菜单。",
+        mode: "doc"
+      })
+      .addFeature(toolbar)
+      .addFeature(codeMirror, { theme: oneDark, languages })
+      .addFeature(table)
+      .addFeature(lazyLatex);
     crepe.editor.config(configureDoubleTildeOnly);
     // Register after Crepe's image feature so the compatible schema takes precedence.
     crepe.editor.use(inkstoneImageBlockSchema);
+    crepe.editor.use(linkReferenceSchema);
+    crepe.editor.use(imageReferenceSchema);
+    crepe.editor.use(definitionSchema);
     // Typora-style immediate rendering for CommonMark links, images and autolinks.
     crepe.editor.use(linkInputRule);
     crepe.editor.use(autolinkInputRule);
@@ -325,8 +441,9 @@ const RichEditor = forwardRef<RichEditorHandle, RichEditorProps>(function RichEd
         const editor = crepeRef.current;
         if (!editor) return;
         try {
-          const size = editor.editor.action((ctx) => ctx.get(editorViewCtx).state.doc.content.size);
-          onDocChangedRef.current?.(size);
+          const doc = editor.editor.action((ctx) => ctx.get(editorViewCtx).state.doc);
+          const sample = doc.textBetween(0, Math.min(doc.content.size, 4000), "\n", "\n");
+          onDocChangedRef.current?.(doc.content.size, sample);
         } catch {
           /* editor tore down between compositionend and the timer */
         }
@@ -372,7 +489,7 @@ const RichEditor = forwardRef<RichEditorHandle, RichEditorProps>(function RichEd
     const onDocumentPointerDown = (event: PointerEvent) => {
       const target = event.target;
       if (target instanceof Element && target.closest(".rich-editor-shell")) return;
-      setTableBar(null);
+      commitTableBar(null);
     };
     const viewport = root.closest(".editor-viewport");
     root.addEventListener("keydown", onTableKeyDown, true);
@@ -393,7 +510,8 @@ const RichEditor = forwardRef<RichEditorHandle, RichEditorProps>(function RichEd
         // snapshotting it would persist half-converted pinyin. compositionend
         // publishes the settled document instead.
         if (composingRef.current) return;
-        onDocChangedRef.current?.(doc.content.size);
+        const sample = doc.textBetween(0, Math.min(doc.content.size, 4000), "\n", "\n");
+        onDocChangedRef.current?.(doc.content.size, sample);
       });
     });
 
@@ -403,14 +521,20 @@ const RichEditor = forwardRef<RichEditorHandle, RichEditorProps>(function RichEd
       .then(() => {
         if (disposed) return;
         crepe.editor.action((ctx) => enforceDoubleTildeInputRule(ctx));
-        readyRef.current = true;
         attachProbes(crepe);
-        imageAltObserver = new MutationObserver(() => {
-          if (liveView) syncImageAltText(liveView);
+        readyRef.current = true;
+        imageAltObserver = new MutationObserver((mutations) => {
+          const imageChanged = mutations.some((mutation) =>
+            [...mutation.addedNodes, ...mutation.removedNodes].some((node) =>
+              node instanceof HTMLElement && (node.matches('img[data-type="image-block"]') || node.querySelector('img[data-type="image-block"]'))
+            )
+          );
+          if (imageChanged && liveView) syncImageAltText(liveView);
         });
         imageAltObserver.observe(root, { childList: true, subtree: true });
         if (liveView) syncImageAltText(liveView);
         setLoading(false);
+        schedulePrewarm();
         scheduleTableBar();
         onReadyRef.current?.();
       })
@@ -424,6 +548,7 @@ const RichEditor = forwardRef<RichEditorHandle, RichEditorProps>(function RichEd
       disposed = true;
       readyRef.current = false;
       userInteractedRef.current = false;
+      liveViewRef.current = null;
       crepeRef.current = null;
       root.removeEventListener("pointerdown", markInteraction);
       root.removeEventListener("keydown", markInteraction);
@@ -439,10 +564,13 @@ const RichEditor = forwardRef<RichEditorHandle, RichEditorProps>(function RichEd
       window.removeEventListener("resize", scheduleTableBar);
       if (tableFrame) window.cancelAnimationFrame(tableFrame);
       if (tableHintTimer) window.clearTimeout(tableHintTimer);
+      if (prewarmTimer) window.clearTimeout(prewarmTimer);
+      if (prewarmIdleId !== null) window.cancelIdleCallback(prewarmIdleId);
+      snapshotCacheRef.current = createMarkdownSnapshotCache();
       imageAltObserver?.disconnect();
       imageAltObserver = null;
       refreshTableBarRef.current = () => undefined;
-      setTableBar(null);
+      commitTableBar(null);
       setTableHint(null);
       registerSerializeProbe(null);
       void crepe.destroy();
@@ -458,7 +586,7 @@ const RichEditor = forwardRef<RichEditorHandle, RichEditorProps>(function RichEd
   };
 
   const closeTableBar = (focusEditor = true) => {
-    setTableBar(null);
+    commitTableBar(null);
     if (!focusEditor) return;
     const editor = crepeRef.current;
     if (!editor) return;
@@ -468,6 +596,12 @@ const RichEditor = forwardRef<RichEditorHandle, RichEditorProps>(function RichEd
 
   return (
     <div className="rich-editor-shell">
+      {frontmatterKind && (
+        <div className="frontmatter-note" role="note">
+          <span>{frontmatterKind} 前言已原样保留，富文本模式不会改写元数据。</span>
+          {onUseSource && <button type="button" onClick={onUseSource}>在源码中编辑</button>}
+        </div>
+      )}
       <div ref={rootRef} className="rich-editor-root" />
       {tableHint && (
         <div className="table-input-hint" role="status" aria-live="polite">

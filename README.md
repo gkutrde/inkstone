@@ -23,6 +23,9 @@
 - 大纲、字词统计、阅读时间
 - 查找与全部替换
 - 表格、任务列表、代码块、图片、LaTeX 公式
+- 引用式链接/图片及定义保留，图片缩放通过独立 HTML 比例属性持久化
+- YAML / TOML 前言富文本保护、文档目录相对图片、数字 alt 保留
+- HTML 导出经 DOMPurify 清洗并带禁止脚本 CSP
 - 纸白 / 旧纸 / 墨夜三种主题，字号与版心宽度可调
 - 无边框一体化窗口、可拖动玻璃标题栏、原生 Acrylic/Mica 背景与 16px 原生圆角；透明模式可读性已单独调校
 - DOCX、HTML、Markdown 副本导出；通过系统打印窗口另存 PDF
@@ -38,10 +41,11 @@
 
 ## 运行时性能
 
-- 输入路径不再对整篇文档做 Markdown 序列化：编辑器只上报变更，快照按文档大小在停顿后生成；保存、模式切换、标签切换、导出、关闭、页面隐藏与 IME 组合结束前强制 flush。
+- 输入路径不再对整篇文档做 Markdown 序列化：编辑器只上报变更，快照按文档大小在停顿后生成；保存、模式切换、标签切换、导出、关闭、页面隐藏与 IME 组合结束前强制 flush。顶层块增量缓存进一步减少重复序列化，1 MB 对照全量 434.10ms → 增量 0.80ms，parity=0。
 - 真实 Tauri/WebView2（release）连续输入到下一帧 p95：31 KB 约 6 ms、251 KB 约 16 ms、1 MB 约 65 ms；连续输入期间无 >300 ms 长任务。
-- 已知限制：1 MB 文档在保存/自动保存时仍有约 400 ms 的整篇序列化；大文档模式切换仍是重建编辑器。完整数据、对照与复现命令见 [TYPING-PERF-REPORT.md](TYPING-PERF-REPORT.md)。
-- 性能探针与回归：`scripts/perf/`（`bench.py`、`typing_e2e.py`、`typing_ime_e2e.py`、`export_e2e.py`、`tauri_desktop_perf.py`、`tauri_soak.py`）。
+- 已知限制：缓存冷建与大文档模式切换仍需重建；主入口及富文本懒加载包仍需继续拆分共享依赖。完整数据、对照与复现命令见 [TYPING-PERF-REPORT.md](TYPING-PERF-REPORT.md)。
+- 性能探针与回归：`scripts/perf/`（`bench.py`、`typing_e2e.py`、`typing_ime_e2e.py`、`source_typing_e2e.py`、`export_e2e.py`、`tauri_desktop_perf.py`、`tauri_soak.py`）。
+- 全链路审查与复验见 [REVIEW-2026-10-26.md](REVIEW-2026-10-26.md)。
 
 ## 安装
 

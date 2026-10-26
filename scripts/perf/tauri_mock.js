@@ -376,7 +376,14 @@
       case "plugin:dialog|open":
       case "plugin:dialog|save":
         return presetDialog();
-      case "plugin:dialog|message":
+      case "plugin:dialog|message": {
+        const buttons = payload.buttons;
+        if (buttons && typeof buttons === "object" && buttons.ok) return buttons.ok;
+        if (buttons && typeof buttons === "object" && Array.isArray(buttons.OkCancelCustom)) return buttons.OkCancelCustom[0];
+        if (buttons && typeof buttons === "object" && buttons.OkCustom) return buttons.OkCustom;
+        if (buttons === "YesNo") return "Yes";
+        return "Ok";
+      }
       case "plugin:dialog|ask":
       case "plugin:dialog|confirm":
         return true;
@@ -402,6 +409,9 @@
     return path;
   }
 
+  window.__TAURI_EVENT_PLUGIN_INTERNALS__ = window.__TAURI_EVENT_PLUGIN_INTERNALS__ || {
+    unregisterListener: function (_event, eventId) { delete callbacks[eventId]; }
+  };
   window.__TAURI_INTERNALS__ = window.__TAURI_INTERNALS__ || {};
   Object.assign(window.__TAURI_INTERNALS__, {
     invoke: invoke,

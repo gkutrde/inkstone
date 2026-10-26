@@ -9,6 +9,15 @@ import {
   recordCommit
 } from "./lib/editorMetrics";
 
+try {
+  const stored = JSON.parse(localStorage.getItem("inkstone.settings.v1") ?? "null") as { theme?: string } | null;
+  if (stored?.theme === "paper" || stored?.theme === "sepia" || stored?.theme === "night") {
+    document.documentElement.dataset.theme = stored.theme;
+  }
+} catch {
+  // Invalid local settings fall back to the paper theme without blocking startup.
+}
+
 if ("__TAURI_INTERNALS__" in window && !("__PERF_FS" in window)) {
   document.documentElement.dataset.desktopFrame = "true";
 }

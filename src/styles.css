@@ -19,7 +19,7 @@
   --ink: #1d1b18;
   --ink-2: #4b4539;
   --ink-3: #736b5c;
-  --ink-4: #a59b88;
+  --ink-4: #6f6759;
   /* 线 */
   --rule: #e6e1d4;
   --rule-2: #d7d0c0;
@@ -30,7 +30,7 @@
   --wash: rgba(29, 27, 24, 0.05);
   --wash-2: rgba(29, 27, 24, 0.09);
   --select: rgba(29, 27, 24, 0.14);
-  --ring: rgba(29, 27, 24, 0.5);
+  --ring: #655e51;
   /* 兼容旧变量（CodeMirror 主题、编辑器组件直接引用） */
   --muted: var(--ink-3);
   --accent: var(--ink);
@@ -77,6 +77,7 @@
   --h-tabs: 38px;
   --h-toolbar: 42px;
   --h-status: 26px;
+  --h-chrome: 138px;
   --w-sidebar: 244px;
   --w-outline: 236px;
   color-scheme: light;
@@ -94,7 +95,7 @@ html[data-theme="sepia"] {
   --ink: #2e281d;
   --ink-2: #574c39;
   --ink-3: #6f6250;
-  --ink-4: #a3967c;
+  --ink-4: #6f6250;
   --rule: #e0d4bb;
   --rule-2: #cfc0a2;
   --seal: #a13f29;
@@ -102,7 +103,7 @@ html[data-theme="sepia"] {
   --wash: rgba(46, 40, 29, 0.05);
   --wash-2: rgba(46, 40, 29, 0.09);
   --select: rgba(46, 40, 29, 0.15);
-  --ring: rgba(46, 40, 29, 0.5);
+  --ring: #625540;
   --shadow-1: 0 1px 2px rgba(46, 40, 29, 0.05), 0 10px 28px rgba(46, 40, 29, 0.08);
   --shadow-2: 0 18px 60px rgba(46, 40, 29, 0.18);
   --ambient-base: #e5dac4;
@@ -132,7 +133,7 @@ html[data-theme="night"] {
   --ink: #e7e1d4;
   --ink-2: #c2b9a7;
   --ink-3: #948a78;
-  --ink-4: #6b6355;
+  --ink-4: #948a78;
   --rule: #2c2a24;
   --rule-2: #3a372f;
   --seal: #c9715a;
@@ -140,7 +141,7 @@ html[data-theme="night"] {
   --wash: rgba(231, 225, 212, 0.06);
   --wash-2: rgba(231, 225, 212, 0.1);
   --select: rgba(231, 225, 212, 0.16);
-  --ring: rgba(231, 225, 212, 0.55);
+  --ring: #b5ab97;
   --shadow-1: 0 1px 2px rgba(0, 0, 0, 0.3), 0 12px 30px rgba(0, 0, 0, 0.32);
   --shadow-2: 0 22px 66px rgba(0, 0, 0, 0.55);
   --ambient-base: #0e100e;
@@ -239,7 +240,7 @@ button:focus-visible,
 input:focus-visible,
 textarea:focus-visible,
 [tabindex]:focus-visible {
-  outline: 1.5px solid var(--ring);
+  outline: 2px solid var(--ring);
   outline-offset: 2px;
 }
 
@@ -866,6 +867,11 @@ kbd,
   color: var(--ink-3);
   white-space: nowrap;
   transition: color 130ms ease, background 130ms ease;
+}
+
+.tab-item:focus-visible {
+  outline: none;
+  box-shadow: inset 0 0 0 2px var(--ring);
 }
 
 .tab-item > svg {
@@ -2417,9 +2423,9 @@ html[data-theme="night"] .source-editor-shell .cm-editor .cm-selectionBackground
 /* ---------- 12. 查找 / 命令中心 / 快捷键 / 输入框 -------------------------- */
 .find-bar {
   position: absolute;
-  top: 126px;
+  top: calc(var(--h-chrome) + 4px);
   right: 18px;
-  z-index: 25;
+  z-index: 60;
   width: 380px;
   padding: 9px;
   border: 1px solid var(--rule);
@@ -2818,6 +2824,85 @@ html[data-theme="night"] .source-editor-shell .cm-editor .cm-selectionBackground
   animation: busy 1.1s ease-in-out infinite;
 }
 
+/* ---------- 13.4 引用定义 ------------------------------------------------- */
+.editor-paper .reference-definition {
+  margin: 0.75em 0;
+  padding: 0.35em 0.65em;
+  border-left: 2px solid var(--rule-2);
+  color: var(--ink-3);
+  font-family: var(--font-mono);
+  font-size: 0.78em;
+  line-height: 1.65;
+  overflow-wrap: anywhere;
+}
+
+.editor-paper a[data-reference] {
+  text-decoration-style: dotted;
+  text-decoration-color: var(--ink-3);
+}
+
+/* ---------- 13.5 前言与冲突反馈 -------------------------------------------- */
+.rich-editor-shell:has(.frontmatter-note) {
+  display: flex;
+  flex-direction: column;
+}
+
+.rich-editor-shell:has(.frontmatter-note) .rich-editor-root {
+  flex: 1;
+  min-height: 0;
+}
+
+.frontmatter-note {
+  flex: 0 0 auto;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  gap: 12px;
+  min-height: 34px;
+  padding: 6px 16px;
+  border-bottom: 1px solid var(--rule);
+  background: var(--paper-back);
+  color: var(--ink-3);
+  font-size: 11.5px;
+}
+
+.frontmatter-note button,
+.conflict-actions button {
+  color: var(--ink);
+  font-weight: 500;
+  text-decoration: underline;
+  text-underline-offset: 3px;
+}
+
+.frontmatter-note button:hover,
+.conflict-actions button:hover {
+  text-decoration-thickness: 2px;
+}
+
+.conflict-banner {
+  flex: 0 0 auto;
+  display: flex;
+  align-items: center;
+  gap: 9px;
+  min-height: 38px;
+  padding: 6px 14px;
+  border-bottom: 1px solid color-mix(in srgb, var(--seal) 24%, var(--rule));
+  background: var(--seal-wash);
+  color: var(--seal);
+  font-size: 12px;
+}
+
+.conflict-banner > span {
+  flex: 1;
+  min-width: 0;
+}
+
+.conflict-actions {
+  display: flex;
+  gap: 14px;
+  flex: 0 0 auto;
+}
+
 /* ---------- 14. 专注模式 --------------------------------------------------- */
 .app.is-focus .app-header,
 .app.is-focus .sidebar,
@@ -2908,6 +2993,16 @@ html[data-theme="night"] .source-editor-shell .cm-editor .cm-selectionBackground
   }
 }
 
+@media (min-width: 761px) and (max-width: 1220px) {
+  .workspace-shell:has(> .outline-panel) .main-column {
+    padding-right: min(290px, 82vw);
+  }
+
+  .workspace-shell:has(> .outline-panel) .editor-viewport {
+    padding-inline: 24px;
+  }
+}
+
 @media (max-width: 1080px) {
   .brand-block,
   .sidebar {
@@ -2976,6 +3071,7 @@ html[data-theme="night"] .source-editor-shell .cm-editor .cm-selectionBackground
 @media (max-width: 760px) {
   :root {
     --h-header: 42px;
+    --h-chrome: 136px;
   }
 
   .brand-block {
@@ -3128,7 +3224,7 @@ html[data-theme="night"] .source-editor-shell .cm-editor .cm-selectionBackground
 
 .table-input-hint {
   position: fixed;
-  top: 92px;
+  top: calc(var(--h-chrome) + 4px);
   inset-inline: 0;
   z-index: 71;
   width: max-content;
@@ -3610,7 +3706,7 @@ html:not([data-desktop-frame="true"]) .window-controls {
 
 .window-control:focus-visible {
   opacity: 1;
-  outline: 1.5px solid var(--ring);
+  outline: 2px solid var(--ring);
   outline-offset: -2px;
 }
 
@@ -3765,6 +3861,8 @@ html[data-desktop-frame="true"] .focus-window-bar .window-controls {
   .document-toolbar,
   .statusbar,
   .find-bar,
+  .frontmatter-note,
+  .conflict-banner,
   .toast,
   .busy-line,
   .editor-paper::before {

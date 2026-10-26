@@ -37,6 +37,7 @@ import Sidebar from "./components/Sidebar";
 import Outline from "./components/Outline";
 import FindBar from "./components/FindBar";
 import type { RichEditorHandle } from "./components/RichEditor";
+import SourceEditor from "./components/SourceEditor";
 import type { SourceEditorHandle } from "./components/SourceEditor";
 import CommandCenter, { type CommandAction } from "./components/CommandCenter";
 import ShortcutDialog from "./components/ShortcutDialog";
@@ -82,11 +83,10 @@ import {
   sinceModeSwitch,
   timeSync
 } from "./lib/editorMetrics";
-import { cancelTask, delayForDocSize, hasPendingTask, scheduleTask } from "./lib/editorScheduler";
+import { cancelTask, delayForDocSize, estimateDocumentBytes, hasPendingTask, scheduleTask } from "./lib/editorScheduler";
 import brandMark from "./assets/brand-mark.svg";
 
 const RichEditor = lazy(() => import("./components/RichEditor"));
-const SourceEditor = lazy(() => import("./components/SourceEditor"));
 
 const SETTINGS_KEY = "inkstone.settings.v1";
 const WORKSPACE_KEY = "inkstone.workspace.v1";
@@ -228,6 +228,9 @@ export default function App() {
   const [recentWorkspaces, setRecentWorkspaces] = useState<string[]>(loadRecentWorkspaces);
   const [workspaceReadOnly, setWorkspaceReadOnly] = useState(false);
   const [findOpen, setFindOpen] = useState(false);
+  const [findFocusRevision, setFindFocusRevision] = useState(0);
+  const [editorReadyRevision, setEditorReadyRevision] = useState(0);
+  const [editorEpoch, setEditorEpoch] = useState(0);
   const [findQuery, setFindQuery] = useState("");
   const [replacement, setReplacement] = useState("");
   const [settingsOpen, setSettingsOpen] = useState(false);
@@ -256,7 +259,10 @@ export default function App() {
   const settingsRef = useRef<Settings>(settings);
   const activeIdRef = useRef<string | null>(activeId);
   const revisionsRef = useRef(new Map<string, number>());
-  const richHasRef = useRef<string | null>(null);
+  const contentSnapshotRef = useRef<string | null>(null);
+  const editorEpochRef = useRef(0);
+  editorEpochRef.current = editorEpoch;
+  const findReturnFocusRef = useRef<HTMLElement | null>(null);
   // Latest openDocument for one-shot callbacks (launch file / second instance).
   const openPathHandlerRef = useRef<(path: string) => void>(() => undefined);
   const scrollContextRef = useRef<{ ratio: number } | null>(null);
@@ -284,15 +290,22 @@ export default function App() {
   );
   const matchCount = useMemo(
     () => {
-      if (!findOpen) return 0;
+      if (!findOpen || !activeTab) return 0;
+      if (activeTab.mode === "rich" && richReadyRef.current) {
+        return richRef.current?.countMatches(findQuery) ?? 0;
+      }
       return timeSync("match_count", () => countMatches(deferredContent, findQuery));
     },
-    [deferredContent, findQuery, findOpen]
+    [deferredContent, findQuery, findOpen, activeTab?.mode, activeId, editorReadyRevision]
   );
 
-  const isTabDirty = (tab: Tab): boolean =>
-    isDirty(tab) ||
-    (revisionsRef.current.get(tab.id) ?? 0) > (savedRevisionsRef.current.get(tab.id) ?? 0);
+  const isTabDirty = (tab: Tab): boolean => {
+    const livePending = tab.id === activeIdRef.current && (tab.mode === "rich"
+      ? richRef.current?.hasPendingChanges()
+      : sourceRef.current?.hasPendingChanges());
+    return isDirty(tab) || Boolean(livePending) ||
+      (revisionsRef.current.get(tab.id) ?? 0) > (savedRevisionsRef.current.get(tab.id) ?? 0);
+  };
 
   const bumpDocRevision = (id: string) => {
     revisionsRef.current.set(id, (revisionsRef.current.get(id) ?? 0) + 1);
@@ -314,14 +327,15 @@ export default function App() {
     tab: Tab | null,
     reason: "flush" | "snapshot"
   ): string | null => {
-    if (!tab || tab.mode !== "rich" || tab.id !== activeIdRef.current) return null;
-    if (!richRef.current) return null;
+    if (!tab || tab.id !== activeIdRef.current) return null;
     const markdown = timeSync(
       reason === "flush" ? "markdown_flush" : "markdown_snapshot",
-      () => richRef.current?.getMarkdown() ?? null
+      () => tab.mode === "rich"
+        ? richRef.current?.getMarkdown(reason === "flush") ?? null
+        : sourceRef.current?.getMarkdown() ?? null
     );
-    if (markdown !== null) richHasRef.current = markdown;
-    record("markdown_bytes", markdown ? markdown.length : -1, { reason });
+    if (markdown !== null) contentSnapshotRef.current = markdown;
+    record("markdown_bytes", markdown ? markdown.length : -1, { reason, mode: tab.mode });
     return markdown;
   };
 
@@ -330,13 +344,11 @@ export default function App() {
     cancelTask("content:" + tab.id);
     // Unchanged since the last snapshot: reuse it instead of paying the full
     // serialization again (saves ~400 ms per redundant flush on 1 MB docs).
-    if (
-      tab.mode === "rich" &&
-      tab.id === activeIdRef.current &&
-      richHasRef.current !== null &&
-      richRef.current?.hasPendingChanges() === false
-    ) {
-      return richHasRef.current;
+    const hasPendingChanges = tab.mode === "rich"
+      ? richRef.current?.hasPendingChanges()
+      : sourceRef.current?.hasPendingChanges();
+    if (tab.id === activeIdRef.current && contentSnapshotRef.current !== null && hasPendingChanges === false) {
+      return contentSnapshotRef.current;
     }
     const markdown = serializeActiveMarkdown(tab, "flush");
     if (markdown === null) return null;
@@ -348,11 +360,13 @@ export default function App() {
 
   // Editor notifications arrive at Milkdown's 200 ms debounce. Small documents
   // are snapshotted immediately; big ones wait for a pause (or an explicit flush).
-  const handleDocChanged = (docSize: number) => {
+  const handleDocChanged = (docSize: number, sampleText = "", epoch = editorEpochRef.current) => {
+    if (epoch !== editorEpochRef.current) return;
     const id = activeIdRef.current;
     if (!id) return;
     bumpDocRevision(id);
-    record("doc_size", docSize, { tier: delayForDocSize(docSize) });
+    const estimatedBytes = estimateDocumentBytes(docSize, sampleText);
+    record("doc_size", docSize, { estimatedBytes, tier: delayForDocSize(estimatedBytes) });
     const run = () => {
       const tab = tabsRef.current.find((item) => item.id === id) ?? null;
       if (!tab) return;
@@ -360,7 +374,7 @@ export default function App() {
       if (markdown === null) return;
       commitMarkdown(id, markdown);
     };
-    const delay = delayForDocSize(docSize);
+    const delay = delayForDocSize(estimatedBytes);
     if (delay === 0) run();
     else scheduleTask("content:" + id, delay, run);
   };
@@ -528,6 +542,11 @@ export default function App() {
       target = withMarkdownExtension(chosen);
     }
 
+    if (tabsRef.current.some((item) => item.id !== id && samePath(item.path, target))) {
+      showToast("该文件已在另一个标签中打开，请先关闭那个标签再另存为。", "error");
+      return;
+    }
+
     // Capture the revision before serializing: anything typed afterwards stays dirty.
     const revisionAtSave = revisionsRef.current.get(id) ?? 0;
     const content = freshContentForTab(tab);
@@ -596,6 +615,43 @@ export default function App() {
   const saveActive = (saveAs = false): Promise<void> => {
     if (!activeTab) return Promise.resolve();
     return queueSave(activeTab.id, saveAs, false);
+  };
+
+  const reloadActiveFromDisk = async () => {
+    const tab = tabsRef.current.find((item) => item.id === activeIdRef.current);
+    if (!tab?.path) return;
+    const confirmed = await confirmDialog(
+      "重新加载会放弃当前标签中尚未保存的内容，并采用磁盘上的最新版本。",
+      { title: "重新加载文稿", kind: "warning", okLabel: "采用磁盘版本", cancelLabel: "保留当前编辑" }
+    );
+    if (!confirmed) return;
+    try {
+      cancelTask("content:" + tab.id);
+      editorEpochRef.current += 1;
+      setEditorEpoch(editorEpochRef.current);
+      richRef.current = null;
+      sourceRef.current = null;
+      const document = await readTextFile(tab.path);
+      setTabs((current) => current.map((item) => item.id === tab.id ? {
+        ...item,
+        content: document.content,
+        savedContent: document.content,
+        modifiedMs: document.modifiedMs,
+        size: document.size
+      } : item));
+      savedRevisionsRef.current.set(tab.id, revisionsRef.current.get(tab.id) ?? 0);
+      setSaveConflictIds((current) => {
+        const next = new Set(current);
+        next.delete(tab.id);
+        return next;
+      });
+      contentSnapshotRef.current = document.content;
+      richReadyRef.current = false;
+      sourceReadyRef.current = false;
+      showToast("已加载磁盘上的最新版本", "success");
+    } catch (error) {
+      showToast("重新加载失败：" + String(error), "error");
+    }
   };
 
   const closeTab = async (id: string) => {
@@ -713,7 +769,6 @@ export default function App() {
     if (activeTab?.mode === mode) return;
     markModeSwitch();
     captureScrollContext();
-    if (mode === "rich") richHasRef.current = null;
     // A-mode switch: flush, then let the other editor mount from this snapshot.
     const markdown = flushTabContent(activeTab);
     focusOnReadyRef.current = true;
@@ -785,9 +840,22 @@ export default function App() {
   };
 
   const removeNode = async (node: FileNode) => {
+    const normalizedTarget = normalizeSlashes(node.path);
+    const dirtyAffected = tabsRef.current.filter((tab) => {
+      if (!tab.path || !isTabDirty(tab)) return false;
+      const path = normalizeSlashes(tab.path);
+      return path === normalizedTarget || (node.isDir && path.startsWith(normalizedTarget + "/"));
+    }).length;
     const confirmed = await confirmDialog(
-      "将“" + node.name + "”移到回收站？",
-      { title: "移到回收站", kind: "warning", okLabel: "移到回收站", cancelLabel: "取消" }
+      "将“" + node.name + "”移到回收站？" + (dirtyAffected
+        ? " 其中 " + dirtyAffected + " 个标签还有未保存内容，这些编辑缓冲会被放弃。"
+        : ""),
+      {
+        title: "移到回收站",
+        kind: "warning",
+        okLabel: dirtyAffected ? "放弃编辑并移回收站" : "移到回收站",
+        cancelLabel: "取消"
+      }
     );
     if (!confirmed) return;
     try {
@@ -892,10 +960,8 @@ export default function App() {
   // The other editor lives in its own lazy chunk; fetching it while the writer
   // is idle removes the network/parse half of the first mode switch.
   const prewarmOtherEditor = (mode: EditorMode) => {
-    const load = mode === "rich"
-      ? import("./components/SourceEditor")
-      : import("./components/RichEditor");
-    void load.catch(() => undefined);
+    if (mode !== "source") return;
+    void import("./components/RichEditor").catch(() => undefined);
   };
   const prewarmOnIdle = (mode: EditorMode) => {
     // A short timer beats requestIdleCallback here: idle callbacks can be
@@ -937,9 +1003,10 @@ export default function App() {
   };
 
   const handleRichReady = () => {
+    setEditorReadyRevision((value) => value + 1);
     richReadyRef.current = true;
-    if (richHasRef.current === null) {
-      richHasRef.current = richRef.current?.getInitialMarkdown() ?? null;
+    if (contentSnapshotRef.current === null) {
+      contentSnapshotRef.current = richRef.current?.getInitialMarkdown() ?? null;
     }
     sinceModeSwitch("mode_switch_ready");
     window.requestAnimationFrame(() => sinceModeSwitch("mode_switch_paint"));
@@ -956,6 +1023,7 @@ export default function App() {
   };
 
   const handleSourceReady = () => {
+    setEditorReadyRevision((value) => value + 1);
     sourceReadyRef.current = true;
     sinceModeSwitch("mode_switch_ready");
     window.requestAnimationFrame(() => sinceModeSwitch("mode_switch_paint"));
@@ -985,19 +1053,8 @@ export default function App() {
       if (!found) showToast("没有更多匹配。", "info");
       return;
     }
-    const find = (window as Window & {
-      find?: (text: string, caseSensitive?: boolean, backwards?: boolean, wrapAround?: boolean,
-        wholeWord?: boolean, searchInFrames?: boolean, showDialog?: boolean) => boolean;
-    }).find;
-    if (find) {
-      const panel = document.querySelector(".find-bar") as HTMLElement | null;
-      if (panel) panel.style.opacity = "0.001";
-      const found = find(findQuery, false, backwards, true, false, false, false);
-      window.setTimeout(() => {
-        if (panel) panel.style.opacity = "";
-      }, 80);
-      if (!found) showToast("没有更多匹配。", "info");
-    }
+    const found = richRef.current?.findNext(findQuery, backwards);
+    if (!found) showToast("没有更多匹配。", "info");
   };
 
   const replaceAll = () => {
@@ -1009,9 +1066,10 @@ export default function App() {
       showToast("没有可替换的匹配。", "info");
       return;
     }
-    const next = source.replace(regex, replacement);
-    if (activeTab.mode === "rich") richRef.current?.replaceContent(next);
+    const next = source.replace(regex, () => replacement);
+    if (activeTab.mode === "rich") richRef.current?.replaceContent(next, false);
     else sourceRef.current?.replaceAll(next);
+    contentSnapshotRef.current = next;
     updateActiveContent(next);
     showToast("已替换 " + count + " 处", "success");
   };
@@ -1122,7 +1180,7 @@ export default function App() {
     richReadyRef.current = false;
     sourceReadyRef.current = false;
     pendingPrintRef.current = false;
-    richHasRef.current = null;
+    contentSnapshotRef.current = null;
   }, [activeId]);
 
   useEffect(() => {
@@ -1156,28 +1214,32 @@ export default function App() {
     return () => window.removeEventListener("resize", onResize);
   }, []);
 
+  const sidebarDrawer = settings.showSidebar && viewportWidth <= 760;
+  const outlineDrawer = settings.showOutline && Boolean(activeTab) && viewportWidth <= 1220;
   useEffect(() => {
-    const sidebarDrawer = settings.showSidebar && viewportWidth <= 760;
-    const outlineDrawer = settings.showOutline && activeTab && viewportWidth <= 1220;
     if (!sidebarDrawer && !outlineDrawer) return;
     const previous = document.activeElement as HTMLElement | null;
     const frame = window.requestAnimationFrame(() => {
       const selector = sidebarDrawer ? ".sidebar .icon-button" : ".outline-heading .icon-button";
       document.querySelector<HTMLElement>(selector)?.focus();
     });
+    return () => {
+      window.cancelAnimationFrame(frame);
+      if (previous?.isConnected) previous.focus();
+    };
+  }, [sidebarDrawer, outlineDrawer]);
+
+  useEffect(() => {
+    if (!sidebarDrawer && !outlineDrawer) return;
     const onKeyDown = (event: KeyboardEvent) => {
-      if (event.key !== "Escape" || commandOpen || shortcutsOpen || prompt || settingsOpen || exportOpen) return;
+      if (event.key !== "Escape" || event.defaultPrevented || findOpen || commandOpen || shortcutsOpen || prompt || settingsOpen || exportOpen) return;
       event.preventDefault();
       if (outlineDrawer) patchSettings({ showOutline: false });
       if (sidebarDrawer) patchSettings({ showSidebar: false });
     };
     window.addEventListener("keydown", onKeyDown);
-    return () => {
-      window.cancelAnimationFrame(frame);
-      window.removeEventListener("keydown", onKeyDown);
-      if (previous?.isConnected) previous.focus();
-    };
-  }, [settings.showSidebar, settings.showOutline, activeId, viewportWidth, commandOpen, shortcutsOpen, prompt, settingsOpen, exportOpen]);
+    return () => window.removeEventListener("keydown", onKeyDown);
+  }, [sidebarDrawer, outlineDrawer, findOpen, commandOpen, shortcutsOpen, prompt, settingsOpen, exportOpen]);
 
   useEffect(() => {
     document.title = activeTab ? activeTab.name + " — Inkstone" : "Inkstone";
@@ -1253,6 +1315,22 @@ export default function App() {
     activateTabAt((base + direction + tabs.length) % tabs.length);
   };
 
+  const openFind = () => {
+    if (!findOpen) findReturnFocusRef.current = document.activeElement as HTMLElement | null;
+    setFindOpen(true);
+    setFindFocusRevision((value) => value + 1);
+  };
+
+  const closeFind = () => {
+    setFindOpen(false);
+    window.requestAnimationFrame(() => {
+      const previous = findReturnFocusRef.current;
+      if (previous?.isConnected && !previous.closest(".find-bar")) previous.focus();
+      else if (activeTab?.mode === "source") sourceRef.current?.focus();
+      else richRef.current?.focus();
+    });
+  };
+
   const commandRef = useRef({
     save: () => undefined as void,
     saveAs: () => undefined as void,
@@ -1278,7 +1356,7 @@ export default function App() {
     openFile: () => void openFileDialog(),
     openFolder: () => void openFolderDialog(),
     close: () => { if (activeTab) void closeTab(activeTab.id); },
-    find: () => setFindOpen(true),
+    find: openFind,
     print: printDocument,
     mode: () => { if (activeTab) setMode(activeTab.mode === "rich" ? "source" : "rich"); },
     palette: openCommandCenter,
@@ -1605,7 +1683,7 @@ export default function App() {
           <kbd>Ctrl K</kbd>
         </button>
         <div className="header-actions">
-          <button className="icon-button quiet" title="查找 (Ctrl+F)" onClick={() => setFindOpen(true)}>
+          <button className="icon-button quiet" title="查找 (Ctrl+F)" onClick={openFind}>
             <Search size={17} />
           </button>
           <button
@@ -1782,7 +1860,7 @@ export default function App() {
                     id={"tab-" + tab.id}
                     className={"tab-item" + (tab.id === activeId ? " is-active" : "")}
                     role="tab"
-                    tabIndex={0}
+                    tabIndex={tab.id === activeId ? 0 : -1}
                     aria-selected={tab.id === activeId}
                     onClick={() => activateTab(tab.id)}
                     onAuxClick={(event) => {
@@ -1879,17 +1957,29 @@ export default function App() {
                 </div>
               </div>
 
+              {saveConflictIds.has(activeTab.id) && (
+                <div className="conflict-banner" role="alert">
+                  <AlertCircle size={16} />
+                  <span>磁盘版本已变化，自动保存已暂停。</span>
+                  <div className="conflict-actions">
+                    <button type="button" onClick={() => void saveActive(true)}>另存为</button>
+                    <button type="button" onClick={() => void reloadActiveFromDisk()}>重新加载</button>
+                  </div>
+                </div>
+              )}
+
               {findOpen && (
                 <FindBar
                   query={findQuery}
                   replacement={replacement}
                   matchCount={matchCount}
+                  focusSignal={findFocusRevision}
                   onQueryChange={setFindQuery}
                   onReplacementChange={setReplacement}
                   onNext={() => jumpToMatch(false)}
                   onPrevious={() => jumpToMatch(true)}
                   onReplaceAll={replaceAll}
-                  onClose={() => setFindOpen(false)}
+                  onClose={closeFind}
                 />
               )}
 
@@ -1898,24 +1988,24 @@ export default function App() {
                   <Suspense fallback={<div className="editor-loading"><span className="loading-spinner" />正在准备编辑器…</div>}>
                     {activeTab.mode === "rich" ? (
                       <RichEditor
-                        key={activeTab.id + "-rich"}
+                        key={activeTab.id + "-rich-" + editorEpoch}
                         ref={richRef}
                         initialMarkdown={activeTab.content}
                         workspace={workspace}
                         documentPath={activeTab.path}
                         onChange={updateActiveContent}
-                        onDocChanged={handleDocChanged}
+                        onDocChanged={(size, sample) => handleDocChanged(size, sample, editorEpoch)}
                         onReady={handleRichReady}
                         onUseSource={() => setMode("source")}
                       />
                     ) : (
                       <SourceEditor
-                        key={activeTab.id + "-source"}
+                        key={activeTab.id + "-source-" + editorEpoch}
                         ref={sourceRef}
                         initialMarkdown={activeTab.content}
                         theme={settings.theme}
                         fontSize={settings.fontSize}
-                        onChange={updateActiveContent}
+                        onDocChanged={(size, sample) => handleDocChanged(size, sample, editorEpoch)}
                         onReady={handleSourceReady}
                       />
                     )}
@@ -1925,7 +2015,7 @@ export default function App() {
 
               <footer className="statusbar">
                 <span>{stats.words.toLocaleString()} 字词</span>
-                <span>{stats.characters.toLocaleString()} 字符</span>
+                <span title="可见字符，不含 Markdown 标记与空白">{stats.characters.toLocaleString()} 字符</span>
                 <span>{stats.minutes} 分钟阅读</span>
                 <span className="statusbar-spacer" />
                 <span>{activeTab.mode === "rich" ? "所见即所得" : "Markdown 源码"}</span>

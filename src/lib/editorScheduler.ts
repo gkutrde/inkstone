@@ -26,6 +26,16 @@ export function delayForDocSize(bytes: number): number {
   return 1500;
 }
 
+export function estimateDocumentBytes(docSize: number, sampleText: string): number {
+  if (!sampleText.length) return docSize;
+  let sampleBytes = 0;
+  for (const char of sampleText) {
+    const point = char.codePointAt(0) ?? 0;
+    sampleBytes += point <= 0x7f ? 1 : point <= 0x7ff ? 2 : point <= 0xffff ? 3 : 4;
+  }
+  return Math.max(docSize, Math.round(docSize * sampleBytes / sampleText.length));
+}
+
 export function scheduleTask(key: string, delayMs: number, run: () => void): void {
   cancelTask(key);
   const timer = window.setTimeout(() => {
