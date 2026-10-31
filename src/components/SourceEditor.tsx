@@ -7,7 +7,7 @@ import {
 import { basicSetup } from "codemirror";
 import { EditorState, Compartment } from "@codemirror/state";
 import { EditorView, keymap, placeholder as codePlaceholder } from "@codemirror/view";
-import { defaultKeymap, historyKeymap, indentWithTab } from "@codemirror/commands";
+import { defaultKeymap, historyKeymap, indentWithTab, redo as historyRedo, undo as historyUndo } from "@codemirror/commands";
 import { markdown } from "@codemirror/lang-markdown";
 import { searchKeymap } from "@codemirror/search";
 import { oneDark } from "@codemirror/theme-one-dark";
@@ -18,6 +18,8 @@ export interface SourceEditorHandle {
   getMarkdown: () => string | null;
   hasPendingChanges: () => boolean;
   replaceAll: (value: string) => void;
+  undo: () => boolean;
+  redo: () => boolean;
   findNext: (query: string, backwards?: boolean) => boolean;
   scrollToLine: (line: number) => void;
   focus: () => void;
@@ -116,6 +118,20 @@ const SourceEditor = forwardRef<SourceEditorHandle, SourceEditorProps>(function 
       view.dispatch({
         changes: { from: 0, to: view.state.doc.length, insert: value }
       });
+    },
+    undo: () => {
+      const view = viewRef.current;
+      if (!view) return false;
+      const applied = historyUndo(view);
+      view.focus();
+      return applied;
+    },
+    redo: () => {
+      const view = viewRef.current;
+      if (!view) return false;
+      const applied = historyRedo(view);
+      view.focus();
+      return applied;
     },
 
     findNext: (query: string, backwards = false) => {

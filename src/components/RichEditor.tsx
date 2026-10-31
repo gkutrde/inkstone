@@ -23,6 +23,7 @@ import { latex as lazyLatex } from "../lib/lazyLatex";
 import { editorViewCtx, remarkCtx, schemaCtx, serializerCtx } from "@milkdown/kit/core";
 import { insertImageInputRule } from "@milkdown/kit/preset/commonmark";
 import { TextSelection } from "@milkdown/kit/prose/state";
+import { redo as historyRedo, undo as historyUndo } from "@milkdown/kit/prose/history";
 import type { EditorView } from "@milkdown/kit/prose/view";
 import { getHTML, replaceAll } from "@milkdown/kit/utils";
 import { convertFileSrc, invoke } from "@tauri-apps/api/core";
@@ -62,6 +63,8 @@ export interface RichEditorHandle {
   /** True when the live doc differs from the last getMarkdown() result. */
   hasPendingChanges: () => boolean;
   replaceContent: (markdown: string, resetHistory?: boolean) => void;
+  undo: () => boolean;
+  redo: () => boolean;
   countMatches: (query: string) => number;
   findNext: (query: string, backwards?: boolean) => boolean;
   focus: () => void;
@@ -210,6 +213,24 @@ const RichEditor = forwardRef<RichEditorHandle, RichEditorProps>(function RichEd
       crepeRef.current.editor.action(replaceAll(parts.body, resetHistory));
       docChangedSinceSnapshotRef.current = !resetHistory;
       onChangeRef.current(markdown);
+    },
+    undo: () => {
+      const view = liveViewRef.current;
+      if (!view) return false;
+      userInteractedRef.current = true;
+      const applied = historyUndo(view.state, view.dispatch);
+      if (applied) refreshTableBarRef.current();
+      view.focus();
+      return applied;
+    },
+    redo: () => {
+      const view = liveViewRef.current;
+      if (!view) return false;
+      userInteractedRef.current = true;
+      const applied = historyRedo(view.state, view.dispatch);
+      if (applied) refreshTableBarRef.current();
+      view.focus();
+      return applied;
     },
     countMatches: (query: string) => {
       const view = liveViewRef.current;

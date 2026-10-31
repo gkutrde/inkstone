@@ -26,11 +26,13 @@ import {
   PanelLeft,
   PanelRight,
   Printer,
+  Redo2,
   Save,
   Search,
   Settings2,
   ShieldCheck,
   Sun,
+  Undo2,
   X
 } from "lucide-react";
 import Sidebar from "./components/Sidebar";
@@ -779,6 +781,12 @@ export default function App() {
           : tab
       )
     );
+  };
+
+  const applyHistory = (action: "undo" | "redo") => {
+    if (!activeTab) return;
+    const editor = activeTab.mode === "rich" ? richRef.current : sourceRef.current;
+    editor?.[action]();
   };
 
   const askNewFile = (parent: string) => {
@@ -1937,6 +1945,28 @@ export default function App() {
                   {activeTab.path && <span className="document-path" title={activeTab.path}>{relativeDocumentPath(activeTab.path, workspace)}</span>}
                 </div>
                 <div className="document-actions">
+                  <button
+                    type="button"
+                    className="icon-button quiet"
+                    title="撤销 (Ctrl+Z)"
+                    aria-label="撤销"
+                    aria-keyshortcuts="Control+Z"
+                    onMouseDown={(event) => event.preventDefault()}
+                    onClick={() => applyHistory("undo")}
+                  >
+                    <Undo2 size={16} />
+                  </button>
+                  <button
+                    type="button"
+                    className="icon-button quiet"
+                    title="重做 (Ctrl+Shift+Z / Ctrl+Y)"
+                    aria-label="重做"
+                    aria-keyshortcuts="Control+Shift+Z Control+Y"
+                    onMouseDown={(event) => event.preventDefault()}
+                    onClick={() => applyHistory("redo")}
+                  >
+                    <Redo2 size={16} />
+                  </button>
                   <button className="icon-button quiet" title="打印 / 另存 PDF" onClick={printDocument}>
                     <Printer size={16} />
                   </button>

@@ -3383,6 +3383,9 @@ html[data-theme="night"] .source-editor-shell .cm-editor .cm-selectionBackground
 
 /* 代码块：紧凑石墨块。总高 = 工具行 + 内容 + 内边距 + 边框，不含外边距。 */
 .editor-paper .rich-editor-root .milkdown .milkdown-code-block {
+  /* The language picker is absolutely positioned inside this node. Clipping
+     here leaves only the search row visible on one-line code blocks. */
+  overflow: visible;
   margin: 20px 0;
   border: 1px solid color-mix(in srgb, var(--code-fg) 13%, transparent);
   border-radius: 10px;
