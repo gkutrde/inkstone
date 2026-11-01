@@ -21,6 +21,8 @@ const answer = 42;
 | 第二行 | 2 |
 | 第三行 | 3 |
 
+<!-- HTML_COMMENT_SHOULD_BE_HIDDEN -->
+
 段落末尾
 """
 
@@ -62,6 +64,10 @@ def main() -> None:
         page.wait_for_timeout(700)
 
         results["initial_table_rows"] = table_rows(page)
+        comment_node = page.locator('.milkdown .ProseMirror [data-type="html"]').first
+        results["html_comment_node_present"] = comment_node.count() == 1
+        results["html_comment_display"] = comment_node.evaluate("el => getComputedStyle(el).display") if comment_node.count() else None
+        results["html_comment_visible_text"] = "HTML_COMMENT_SHOULD_BE_HIDDEN" in page.locator(".milkdown .ProseMirror").inner_text()
         language = page.locator(".milkdown-code-block .language-button").first
         language.click()
         page.wait_for_selector(".language-picker .list-wrapper", timeout=5000)
@@ -117,6 +123,7 @@ def main() -> None:
             cycle_rows.append(table_rows(page))
         results["table_rows_after_cycles"] = cycle_rows
         results["table_source_after_cycles"] = cycle_source
+        results["comment_preserved_in_source"] = "HTML_COMMENT_SHOULD_BE_HIDDEN" in cycle_source[-1]
         page.screenshot(path=str(OUT / "table-after-cycles.png"), full_page=True)
 
         # Exercise rows created in the rich editor, then switch while the table
@@ -176,12 +183,31 @@ def main() -> None:
             page.wait_for_timeout(250)
             results["source_ctrl_z_restores"] = "SOURCE_BUTTON" not in source.inner_text()
 
+        # Editing a source line must be visible after switching back to the
+        # rendered editor. This is the path that failed for HTML comments.
+        source_content = page.evaluate("() => window.__inkTest.activeTab().content")
+        updated_source = source_content.replace(
+            "<!-- HTML_COMMENT_SHOULD_BE_HIDDEN -->",
+            "SOURCE_EDIT_VISIBLE"
+        )
+        source.click()
+        page.keyboard.press("Control+A")
+        page.keyboard.insert_text(updated_source)
+        page.wait_for_timeout(300)
+        switch_mode(page, "rich")
+        results["source_edit_visible_after_render"] = "SOURCE_EDIT_VISIBLE" in page.locator(".milkdown .ProseMirror").inner_text()
+
         results["page_errors"] = errors
         print(json.dumps(results, ensure_ascii=False, indent=2))
         browser.close()
 
         expected = [
             results.get("initial_table_rows") == 4,
+            results.get("html_comment_node_present") is True,
+            results.get("html_comment_display") == "none",
+            results.get("html_comment_visible_text") is False,
+            results.get("comment_preserved_in_source") is True,
+            results.get("source_edit_visible_after_render") is True,
             results.get("language_selection") == "Python",
             isinstance(results.get("language_picker"), dict) and results["language_picker"].get("hitInsidePicker") is True,
             isinstance(results.get("language_scroll_top"), (int, float)) and results["language_scroll_top"] > 0,

@@ -1456,6 +1456,12 @@ kbd,
   padding: 0.4em 0;
 }
 
+/* HTML comments are metadata, not prose. Keep the node for lossless
+   Markdown round-tripping but hide it from the writing surface. */
+.editor-paper .rich-editor-root .milkdown .ProseMirror [data-type="html"][data-value*="<!--"][data-value*="-->"] {
+  display: none;
+}
+
 .editor-paper .rich-editor-root .milkdown .ProseMirror .placeholder {
   color: var(--ink-4);
   opacity: 0.9;
