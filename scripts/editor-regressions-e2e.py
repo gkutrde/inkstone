@@ -197,6 +197,25 @@ def main() -> None:
         switch_mode(page, "rich")
         results["source_edit_visible_after_render"] = "SOURCE_EDIT_VISIBLE" in page.locator(".milkdown .ProseMirror").inner_text()
 
+        # Ctrl+/ belongs to the app. CodeMirror's Mod-/ toggleComment must not
+        # run at the same time and inject an HTML comment into the document.
+        page.keyboard.press("Control+e")
+        page.wait_for_selector(".source-editor-shell .cm-content", timeout=30000)
+        page.wait_for_timeout(400)
+        source_before_slash = page.evaluate("() => window.__inkTest.activeTab().content")
+        source.click()
+        page.keyboard.press("Control+End")
+        page.keyboard.press("Control+/")
+        page.wait_for_selector(".milkdown .ProseMirror", timeout=30000)
+        page.wait_for_timeout(500)
+        results["ctrl_slash_switches_to_rich"] = page.locator(".milkdown .ProseMirror").count() == 1
+        page.keyboard.press("Control+e")
+        page.wait_for_selector(".source-editor-shell .cm-content", timeout=30000)
+        page.wait_for_timeout(400)
+        source_after_slash = page.evaluate("() => window.__inkTest.activeTab().content")
+        results["ctrl_slash_preserves_source"] = source_after_slash == source_before_slash
+        results["ctrl_slash_adds_no_comment"] = "<!--" not in source_after_slash
+
         results["page_errors"] = errors
         print(json.dumps(results, ensure_ascii=False, indent=2))
         browser.close()
@@ -208,6 +227,9 @@ def main() -> None:
             results.get("html_comment_visible_text") is False,
             results.get("comment_preserved_in_source") is True,
             results.get("source_edit_visible_after_render") is True,
+            results.get("ctrl_slash_switches_to_rich") is True,
+            results.get("ctrl_slash_preserves_source") is True,
+            results.get("ctrl_slash_adds_no_comment") is True,
             results.get("language_selection") == "Python",
             isinstance(results.get("language_picker"), dict) and results["language_picker"].get("hitInsidePicker") is True,
             isinstance(results.get("language_scroll_top"), (int, float)) and results["language_scroll_top"] > 0,

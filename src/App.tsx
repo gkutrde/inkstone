@@ -1428,14 +1428,23 @@ export default function App() {
       } else if (event.key.toLowerCase() === "d" && event.shiftKey) {
         event.preventDefault();
         commandRef.current.focus();
-      } else if (event.code === "Slash") {
-        // Ctrl+/ toggles source/rendered, matching the editor-heavy muscle memory.
-        event.preventDefault();
-        commandRef.current.mode();
       }
     };
+    // Ctrl+/ is an application shortcut. Intercept it before CodeMirror's
+    // Mod-/ toggleComment keymap can turn the current line into an HTML comment.
+    const onModeShortcutCapture = (event: KeyboardEvent) => {
+      if (commandOpen || shortcutsOpen || prompt || settingsOpen || exportOpen) return;
+      if ((!event.ctrlKey && !event.metaKey) || event.code !== "Slash") return;
+      event.preventDefault();
+      event.stopPropagation();
+      commandRef.current.mode();
+    };
+    window.addEventListener("keydown", onModeShortcutCapture, true);
     window.addEventListener("keydown", onKeyDown);
-    return () => window.removeEventListener("keydown", onKeyDown);
+    return () => {
+      window.removeEventListener("keydown", onModeShortcutCapture, true);
+      window.removeEventListener("keydown", onKeyDown);
+    };
   }, [commandOpen, shortcutsOpen, prompt, settingsOpen, exportOpen]);
 
   useEffect(() => {
