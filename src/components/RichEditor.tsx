@@ -20,6 +20,7 @@ import { toolbar } from "@milkdown/crepe/feature/toolbar";
 import { codeTheme } from "../lib/codeTheme";
 import { keepEditorLanguageMenusVisible } from "../lib/editorFloatingMenus";
 import { codeEditingExtensions, codeLanguages } from "../lib/codeEditing";
+import { isImeKeyEvent } from "../lib/keyboard";
 import { latex as lazyLatex } from "../lib/lazyLatex";
 import { editorViewCtx, remarkCtx, schemaCtx, serializerCtx } from "@milkdown/kit/core";
 import { insertImageInputRule } from "@milkdown/kit/preset/commonmark";
@@ -70,6 +71,7 @@ export interface RichEditorHandle {
   undo: () => boolean;
   redo: () => boolean;
   countMatches: (query: string) => number;
+  replaceAllVisible: (query: string, replacement: string) => number;
   findNext: (query: string, backwards?: boolean) => boolean;
   focus: () => void;
   scrollToHeading: (index: number) => boolean;
@@ -241,6 +243,20 @@ const RichEditor = forwardRef<RichEditorHandle, RichEditorProps>(function RichEd
     countMatches: (query: string) => {
       const view = liveViewRef.current;
       return view ? findTextMatches(view, query).length : 0;
+    },
+    replaceAllVisible: (query: string, replacement: string) => {
+      const view = liveViewRef.current;
+      if (!view || !query || composingRef.current) return 0;
+      const matches = findTextMatches(view, query);
+      if (!matches.length) return 0;
+      const tr = view.state.tr;
+      for (let index = matches.length - 1; index >= 0; index -= 1) {
+        const match = matches[index];
+        tr.insertText(replacement, match.from, match.to);
+      }
+      userInteractedRef.current = true;
+      view.dispatch(tr.scrollIntoView());
+      return matches.length;
     },
     findNext: (query: string, backwards = false) => {
       const view = liveViewRef.current;
@@ -665,6 +681,7 @@ const RichEditor = forwardRef<RichEditorHandle, RichEditorProps>(function RichEd
           aria-label="表格行列与对齐操作"
           aria-keyshortcuts="Shift+F10"
           onKeyDown={(event) => {
+            if (isImeKeyEvent(event)) return;
             if (event.key !== "Escape") return;
             event.preventDefault();
             event.stopPropagation();

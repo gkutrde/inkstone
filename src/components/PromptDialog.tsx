@@ -1,6 +1,7 @@
 import { useEffect, useRef, useState } from "react";
 import { X } from "./IosIcons";
 import { useModalA11y } from "../lib/useModalA11y";
+import { isImeKeyEvent } from "../lib/keyboard";
 
 export interface PromptRequest {
   title: string;
@@ -81,6 +82,12 @@ export default function PromptDialog({ request, onClose }: PromptDialogProps) {
           placeholder={request.placeholder}
           onChange={(event) => setValue(event.target.value)}
           spellCheck={false}
+          onKeyDown={(event) => {
+            if (isImeKeyEvent(event) && event.key === "Enter") {
+              event.preventDefault();
+              event.stopPropagation();
+            }
+          }}
           aria-invalid={Boolean(error)}
           aria-describedby={error ? "prompt-error" : undefined}
         />

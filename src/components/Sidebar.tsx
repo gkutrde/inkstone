@@ -1,4 +1,5 @@
 import { useEffect, useMemo, useRef, useState } from "react";
+import { isImeKeyEvent } from "../lib/keyboard";
 import {
   AlertCircle,
   ChevronDown,
@@ -220,6 +221,7 @@ export default function Sidebar({
     if (!menu) return;
     const close = () => setMenu(null);
     const blockShortcuts = (event: KeyboardEvent) => {
+      if (isImeKeyEvent(event)) return;
       if (event.ctrlKey || event.metaKey) {
         event.preventDefault();
         event.stopPropagation();
@@ -254,6 +256,7 @@ export default function Sidebar({
   };
 
   const handleTreeKeyDown = (event: React.KeyboardEvent) => {
+    if (isImeKeyEvent(event)) return;
     if ((event.target as HTMLElement).closest("button, a, input")) return;
     const row = (event.target as HTMLElement).closest<HTMLElement>(".tree-row");
     if (!row || !visibleNodes.length) return;

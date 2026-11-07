@@ -1,4 +1,5 @@
 import { useEffect, useRef, type RefObject } from "react";
+import { isImeKeyEvent } from "./keyboard";
 
 const FOCUSABLE = [
   "button:not([disabled])",
@@ -26,6 +27,7 @@ export function useModalA11y(
       (first ?? containerRef.current)?.focus();
     });
     const onKeyDown = (event: KeyboardEvent) => {
+      if (isImeKeyEvent(event)) return;
       if (event.key === "Escape" && !event.defaultPrevented) {
         event.preventDefault();
         onCloseRef.current();

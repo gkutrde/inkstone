@@ -1,6 +1,7 @@
 import { useEffect, useMemo, useRef, useState, type ReactNode } from "react";
 import { Clock3, Command as CommandIcon, CornerDownLeft, Search } from "./IosIcons";
 import { useModalA11y } from "../lib/useModalA11y";
+import { isImeKeyEvent } from "../lib/keyboard";
 
 export interface CommandAction {
   id: string;
@@ -119,6 +120,7 @@ export default function CommandCenter({ actions, onClose }: CommandCenterProps) 
             aria-autocomplete="list"
             aria-activedescendant={active ? "command-option-" + active.action.id : undefined}
             onKeyDown={(event) => {
+              if (isImeKeyEvent(event)) return;
               if (event.key === "ArrowDown" || event.key === "ArrowUp") {
                 event.preventDefault();
                 if (!ranked.length) return;

@@ -92,8 +92,10 @@ def main() -> None:
         'docs/RELEASE-0.1.3.md', f'docs/RELEASE-{VERSION}.md',
         'docs/v0.1.2-editor-paper.png', 'docs/v0.1.3-editor-paper.png',
         'docs/v0.1.3-welcome-paper.png', 'docs/v0.1.3-language-before.png',
-        'docs/v0.1.3-language-after.png', f'docs/v{VERSION}-table-align.png',
-        f'docs/v{VERSION}-cpp-ghost.png', f'docs/v{VERSION}-cpp-main.png'
+        'docs/v0.1.3-language-after.png', 'docs/v0.1.4-table-align.png',
+        'docs/v0.1.4-cpp-ghost.png', 'docs/v0.1.4-cpp-main.png',
+        f'docs/v{VERSION}-save-failure.png', f'docs/v{VERSION}-native-close-cancel.png',
+        f'docs/v{VERSION}-native-close-confirm.png'
     ]:
         source = ROOT / name
         if source.is_file():

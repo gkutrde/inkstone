@@ -1,6 +1,6 @@
 [package]
 name = "inkstone"
-version = "0.1.4"
+version = "0.1.5"
 description = "A focused Markdown writing studio"
 authors = ["Inkstone"]
 license = "MIT"

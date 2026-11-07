@@ -5,6 +5,7 @@ import { listen } from "@tauri-apps/api/event";
 import { getCurrentWindow } from "@tauri-apps/api/window";
 import WindowControls from "./components/WindowControls";
 import { syncDesktopGlass } from "./lib/windowGlass";
+import { isImeKeyEvent } from "./lib/keyboard";
 import {
   AlertCircle,
   BookOpen,
@@ -252,6 +253,7 @@ export default function App() {
   const [busy, setBusy] = useState(false);
   const [autoSavingIds, setAutoSavingIds] = useState<Set<string>>(new Set());
   const [saveConflictIds, setSaveConflictIds] = useState<Set<string>>(new Set());
+  const [saveErrors, setSaveErrors] = useState<Record<string, string>>({});
   // Bumped when the live editor reports a change; lets the dirty marker and the
   // autosave timer react long before the expensive Markdown snapshot exists.
   const [docRevision, setDocRevision] = useState(0);
@@ -275,6 +277,9 @@ export default function App() {
   const scrollContextRef = useRef<{ ratio: number } | null>(null);
   const savedRevisionsRef = useRef(new Map<string, number>());
   const saveQueues = useRef(new Map<string, Promise<void>>());
+  const saveRetryCountRef = useRef(new Map<string, number>());
+  const saveRetryTimersRef = useRef(new Map<string, number>());
+  const closeRequestPendingRef = useRef(false);
   const openRequestRef = useRef(0);
   const workspaceRequestRef = useRef(0);
   const restoredDrafts = useRef(tabs.some((tab) => tab.path === null && tab.content.length > 0));
@@ -559,6 +564,34 @@ export default function App() {
     });
   };
 
+  const clearSaveRetry = (id: string) => {
+    const timer = saveRetryTimersRef.current.get(id);
+    if (timer !== undefined) window.clearTimeout(timer);
+    saveRetryTimersRef.current.delete(id);
+    saveRetryCountRef.current.delete(id);
+    setSaveErrors((current) => {
+      if (current[id] === undefined) return current;
+      const next = { ...current };
+      delete next[id];
+      return next;
+    });
+  };
+
+  const scheduleSaveRetry = (id: string) => {
+    const attempt = (saveRetryCountRef.current.get(id) ?? 0) + 1;
+    saveRetryCountRef.current.set(id, attempt);
+    if (attempt > 3) return;
+    const previous = saveRetryTimersRef.current.get(id);
+    if (previous !== undefined) window.clearTimeout(previous);
+    const delay = 2000 * (2 ** (attempt - 1));
+    const timer = window.setTimeout(() => {
+      saveRetryTimersRef.current.delete(id);
+      if (!tabsRef.current.some((tab) => tab.id === id)) return;
+      void queueSave(id, false, true);
+    }, delay);
+    saveRetryTimersRef.current.set(id, timer);
+  };
+
   const saveTabNow = async (id: string, saveAs: boolean, automatic: boolean) => {
     const tab = tabsRef.current.find((item) => item.id === id);
     if (!tab) return;
@@ -587,7 +620,8 @@ export default function App() {
     if (automatic) markAutoSaving(id, true);
     else setBusy(true);
     try {
-      const expected = !saveAs && tab.modifiedMs !== undefined && tab.size !== undefined
+      const sameCurrentPath = tab.path !== null && samePath(tab.path, target);
+      const expected = (!saveAs || sameCurrentPath) && tab.modifiedMs !== undefined && tab.size !== undefined
         ? { modifiedMs: tab.modifiedMs, size: tab.size }
         : undefined;
       const result = await writeTextFile(target, content, expected);
@@ -607,6 +641,7 @@ export default function App() {
         )
       );
       savedRevisionsRef.current.set(id, revisionAtSave);
+      clearSaveRetry(id);
       setSaveConflictIds((current) => {
         if (!current.has(id)) return current;
         const next = new Set(current);
@@ -621,12 +656,15 @@ export default function App() {
     } catch (error) {
       const message = String(error);
       if (message.startsWith("SAVE_CONFLICT:")) {
+        clearSaveRetry(id);
         setSaveConflictIds((current) => new Set(current).add(id));
         showToast(
           (automatic ? "自动保存已暂停：" : "") + message.slice("SAVE_CONFLICT:".length),
           "error"
         );
       } else {
+        setSaveErrors((current) => ({ ...current, [id]: message }));
+        if (automatic) scheduleSaveRetry(id);
         showToast((automatic ? "自动保存失败：" : "") + message, "error");
       }
     } finally {
@@ -649,6 +687,14 @@ export default function App() {
   const saveActive = (saveAs = false): Promise<void> => {
     if (!activeTab) return Promise.resolve();
     return queueSave(activeTab.id, saveAs, false);
+  };
+
+  const retrySaveNow = (id: string) => {
+    const timer = saveRetryTimersRef.current.get(id);
+    if (timer !== undefined) window.clearTimeout(timer);
+    saveRetryTimersRef.current.delete(id);
+    saveRetryCountRef.current.delete(id);
+    void queueSave(id, false, false);
   };
 
   const reloadActiveFromDisk = async () => {
@@ -706,6 +752,13 @@ export default function App() {
       if (!confirmed) return;
     }
     cancelTask("content:" + id);
+    clearSaveRetry(id);
+    setSaveConflictIds((currentConflict) => {
+      if (!currentConflict.has(id)) return currentConflict;
+      const nextConflict = new Set(currentConflict);
+      nextConflict.delete(id);
+      return nextConflict;
+    });
     const index = current.findIndex((item) => item.id === id);
     const next = current.filter((item) => item.id !== id);
     const nextActiveId = activeIdRef.current === id
@@ -728,28 +781,32 @@ export default function App() {
   };
 
   const requestWindowClose = async () => {
-    if (!("__TAURI_INTERNALS__" in window)) return;
-    const current = tabsRef.current.map((tab) => {
-      if (tab.id !== activeIdRef.current) return tab;
-      const latest = flushTabContent(tab);
-      return latest === null ? tab : { ...tab, content: latest };
-    });
-    const dirty = current.filter((tab) => isTabDirty(tab));
-    if (dirty.length > 0) {
-      const scope = dirty.length === 1
-        ? "“" + dirty[0].name + "”还有未保存的更改。"
-        : "有 " + dirty.length + " 个文稿还有未保存的更改。";
-      const confirmed = await confirmDialog(
-        scope + "关闭窗口后这些更改会丢失。",
-        { title: "关闭 Inkstone", kind: "warning", okLabel: "放弃更改并关闭", cancelLabel: "继续编辑" }
-      );
-      if (!confirmed) return;
-    }
-    persistDrafts(current);
+    if (!("__TAURI_INTERNALS__" in window) || closeRequestPendingRef.current) return;
+    closeRequestPendingRef.current = true;
     try {
-      await getCurrentWindow().close();
+      const current = tabsRef.current.map((tab) => {
+        if (tab.id !== activeIdRef.current) return tab;
+        const latest = flushTabContent(tab);
+        return latest === null ? tab : { ...tab, content: latest };
+      });
+      const dirty = current.filter((tab) => isTabDirty(tab));
+      if (dirty.length > 0) {
+        const scope = dirty.length === 1
+          ? "“" + dirty[0].name + "”还有未保存的更改。"
+          : "有 " + dirty.length + " 个文稿还有未保存的更改。";
+        const confirmed = await confirmDialog(
+          scope + "关闭窗口后这些更改会丢失。",
+          { title: "关闭 Inkstone", kind: "warning", okLabel: "放弃更改并关闭", cancelLabel: "继续编辑" }
+        );
+        if (!confirmed) return;
+      }
+      persistDrafts(current);
+      // CloseRequested stays intercepted; destroy is the documented non-recursive exit.
+      await getCurrentWindow().destroy();
     } catch (error) {
       showToast("无法关闭窗口：" + String(error), "error");
+    } finally {
+      closeRequestPendingRef.current = false;
     }
   };
 
@@ -1099,6 +1156,20 @@ export default function App() {
 
   const replaceAll = () => {
     if (!activeTab || !findQuery) return;
+    if (activeTab.mode === "rich") {
+      const count = richRef.current?.replaceAllVisible(findQuery, replacement) ?? 0;
+      if (count === 0) {
+        showToast("没有可替换的匹配。", "info");
+        return;
+      }
+      const next = flushTabContent(activeTab);
+      if (next !== null) {
+        contentSnapshotRef.current = next;
+        updateActiveContent(next);
+      }
+      showToast("已替换 " + count + " 处", "success");
+      return;
+    }
     const regex = new RegExp(escapeRegExp(findQuery), "gi");
     const source = freshContentForTab(activeTab);
     const count = (source.match(regex) ?? []).length;
@@ -1107,8 +1178,7 @@ export default function App() {
       return;
     }
     const next = source.replace(regex, () => replacement);
-    if (activeTab.mode === "rich") richRef.current?.replaceContent(next, false);
-    else sourceRef.current?.replaceAll(next);
+    sourceRef.current?.replaceAll(next);
     contentSnapshotRef.current = next;
     updateActiveContent(next);
     showToast("已替换 " + count + " 处", "success");
@@ -1135,6 +1205,18 @@ export default function App() {
     void takePendingOpen()
       .then(handleLaunch)
       .catch((error) => showToast("无法读取启动文件：" + String(error), "error"));
+    return () => {
+      disposed = true;
+      void unlisten.then((stop) => stop()).catch(() => undefined);
+    };
+  }, []);
+
+  useEffect(() => {
+    if (!("__TAURI_INTERNALS__" in window)) return;
+    let disposed = false;
+    const unlisten = listen("inkstone://close-requested", () => {
+      if (!disposed) void requestWindowClose();
+    });
     return () => {
       disposed = true;
       void unlisten.then((stop) => stop()).catch(() => undefined);
@@ -1412,6 +1494,7 @@ export default function App() {
 
   useEffect(() => {
     const onKeyDown = (event: KeyboardEvent) => {
+      if (isImeKeyEvent(event)) return;
       if (commandOpen || shortcutsOpen || prompt || settingsOpen || exportOpen) return;
       const modifier = event.ctrlKey || event.metaKey;
       if (modifier && event.key === "Tab") {
@@ -1467,6 +1550,7 @@ export default function App() {
     // Ctrl+/ is an application shortcut. Intercept it before CodeMirror's
     // Mod-/ toggleComment keymap can turn the current line into an HTML comment.
     const onModeShortcutCapture = (event: KeyboardEvent) => {
+      if (isImeKeyEvent(event)) return;
       if (commandOpen || shortcutsOpen || prompt || settingsOpen || exportOpen) return;
       if ((!event.ctrlKey && !event.metaKey) || event.code !== "Slash") return;
       event.preventDefault();
@@ -1490,6 +1574,7 @@ export default function App() {
       setExportOpen(false);
     };
     const closeOnEscape = (event: KeyboardEvent) => {
+      if (isImeKeyEvent(event)) return;
       if (event.key !== "Escape") return;
       event.preventDefault();
       setSettingsOpen(false);
@@ -1689,7 +1774,9 @@ export default function App() {
     ? ""
     : saveConflictIds.has(activeTab.id)
       ? "磁盘版本冲突"
-      : autoSavingIds.has(activeTab.id)
+      : saveErrors[activeTab.id]
+        ? "保存失败"
+        : autoSavingIds.has(activeTab.id)
       ? "正在自动保存"
       : !isTabDirty(activeTab)
         ? "已保存"
@@ -1923,6 +2010,7 @@ export default function App() {
                       if (event.button === 1) void closeTab(tab.id);
                     }}
                     onKeyDown={(event) => {
+                      if (isImeKeyEvent(event)) return;
                       if (event.key === "Enter" || event.key === " ") {
                         event.preventDefault();
                         activateTab(tab.id);
@@ -2044,6 +2132,16 @@ export default function App() {
                   <div className="conflict-actions">
                     <button type="button" onClick={() => void saveActive(true)}>另存为</button>
                     <button type="button" onClick={() => void reloadActiveFromDisk()}>重新加载</button>
+                  </div>
+                </div>
+              )}
+
+              {!saveConflictIds.has(activeTab.id) && saveErrors[activeTab.id] && (
+                <div className="conflict-banner" role="alert">
+                  <AlertCircle size={16} />
+                  <span>保存失败：{saveErrors[activeTab.id]}</span>
+                  <div className="conflict-actions">
+                    <button type="button" onClick={() => retrySaveNow(activeTab.id)}>重试</button>
                   </div>
                 </div>
               )}

@@ -1,5 +1,6 @@
 import { useEffect, useRef } from "react";
 import { ArrowDown, ArrowUp, Replace, X } from "./IosIcons";
+import { isImeKeyEvent } from "../lib/keyboard";
 
 interface FindBarProps {
   query: string;
@@ -43,6 +44,7 @@ export default function FindBar({
           aria-label="查找内容"
           onChange={(event) => onQueryChange(event.target.value)}
           onKeyDown={(event) => {
+            if (isImeKeyEvent(event)) return;
             if (event.key === "Enter") {
               event.preventDefault();
               if (event.shiftKey) onPrevious();
@@ -73,6 +75,7 @@ export default function FindBar({
           aria-label="替换为"
           onChange={(event) => onReplacementChange(event.target.value)}
           onKeyDown={(event) => {
+            if (isImeKeyEvent(event)) return;
             if (event.key === "Escape") {
               event.preventDefault();
               event.stopPropagation();
