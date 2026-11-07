@@ -87,12 +87,19 @@ def main() -> None:
         files.append((target, name))
     ship(exe, 'Inkstone.exe')
     ship(loader, 'WebView2Loader.dll')
-    for name in ['LICENSE.txt', 'THIRD-PARTY-NOTICES.md', 'CHANGELOG.md', 'docs/IOS-REDESIGN.md', 'docs/RELEASE-0.1.3.md', 'docs/v0.1.2-editor-paper.png', 'docs/v0.1.3-editor-paper.png', 'docs/v0.1.3-welcome-paper.png', 'docs/v0.1.3-language-before.png', 'docs/v0.1.3-language-after.png']:
+    for name in [
+        'LICENSE.txt', 'THIRD-PARTY-NOTICES.md', 'CHANGELOG.md', 'docs/IOS-REDESIGN.md',
+        'docs/RELEASE-0.1.3.md', f'docs/RELEASE-{VERSION}.md',
+        'docs/v0.1.2-editor-paper.png', 'docs/v0.1.3-editor-paper.png',
+        'docs/v0.1.3-welcome-paper.png', 'docs/v0.1.3-language-before.png',
+        'docs/v0.1.3-language-after.png', f'docs/v{VERSION}-table-align.png',
+        f'docs/v{VERSION}-cpp-ghost.png', f'docs/v{VERSION}-cpp-main.png'
+    ]:
         source = ROOT / name
         if source.is_file():
             ship(source, name)
     readme = package / 'README.txt'
-    readme.write_text('Inkstone ' + VERSION + '\n\n运行 Inkstone.exe。需要 Windows x64 和 Microsoft Edge WebView2。\n安装版、便携版使用相同应用标识；升级不会主动清除草稿、文稿或设置。\n本发行物未做 Authenticode 签名，Windows SmartScreen 可能显示未知发布者。\n本轮验证范围与限制见 BUILD-INFO.json 和 docs/RELEASE-0.1.3.md。\n', encoding='utf-8')
+    readme.write_text('Inkstone ' + VERSION + '\n\n运行 Inkstone.exe。需要 Windows x64 和 Microsoft Edge WebView2。\n安装版、便携版使用相同应用标识；升级不会主动清除草稿、文稿或设置。\n本发行物未做 Authenticode 签名，Windows SmartScreen 可能显示未知发布者。\n' + f'本轮验证范围与限制见 BUILD-INFO.json 和 docs/RELEASE-{VERSION}.md。\n', encoding='utf-8')
     files.append((readme, readme.name))
     # Developer references belong to the versioned source tree, not the portable runtime.
     shipped = {name for _, name in files}

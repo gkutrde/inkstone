@@ -13,6 +13,7 @@ import { searchKeymap } from "@codemirror/search";
 import { oneDark } from "@codemirror/theme-one-dark";
 import type { ThemeName } from "../types";
 import { markInputStart, sinceModeSwitch } from "../lib/editorMetrics";
+import { codeEditingExtensions, codeLanguages } from "../lib/codeEditing";
 
 export interface SourceEditorHandle {
   getMarkdown: () => string | null;
@@ -178,7 +179,8 @@ const SourceEditor = forwardRef<SourceEditorHandle, SourceEditorProps>(function 
         doc: initialMarkdown,
         extensions: [
           basicSetup,
-          markdown(),
+          markdown({ codeLanguages }),
+          ...codeEditingExtensions,
           EditorView.lineWrapping,
           codePlaceholder("直接用 Markdown 书写。"),
           themeCompartment.current.of(theme === "night" ? nightTheme(fontSize) : lightTheme(fontSize)),

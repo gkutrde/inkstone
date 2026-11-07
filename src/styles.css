@@ -1412,6 +1412,19 @@ kbd,
   border-radius: 6px;
 }
 
+.cm-ghost-completion {
+  color: currentColor;
+  opacity: 0.46;
+  font: inherit;
+  line-height: inherit;
+  letter-spacing: inherit;
+  tab-size: inherit;
+  white-space: pre-wrap;
+  overflow-wrap: anywhere;
+  pointer-events: none;
+  user-select: none;
+}
+
 
 .editor-paper .rich-editor-root .milkdown .ProseMirror img {
   display: block;
@@ -3237,7 +3250,8 @@ html[data-theme="night"] .source-editor-shell .cm-editor .cm-selectionBackground
 .table-quickbar {
   position: fixed;
   z-index: 70;
-  width: 232px;
+  width: 364px;
+  max-width: calc(100vw - 16px);
   height: 34px;
   display: flex;
   align-items: center;
@@ -3306,6 +3320,15 @@ html[data-theme="night"] .source-editor-shell .cm-editor .cm-selectionBackground
 
 .table-quickbar-button:active:not(:disabled) {
   transform: scale(0.97);
+}
+
+.table-quickbar-button[aria-pressed="true"] {
+  background: var(--wash-2);
+  color: var(--accent);
+}
+
+.table-quickbar-button[aria-pressed="true"] svg {
+  opacity: 1;
 }
 
 .table-quickbar-button:disabled {

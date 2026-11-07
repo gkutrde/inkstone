@@ -6,7 +6,7 @@ import {
   useState
 } from "react";
 import type { CSSProperties } from "react";
-import { ArrowDown, ArrowLeft, ArrowRight, ArrowUp } from "./IosIcons";
+import { AlignCenter, AlignLeft, AlignRight, ArrowDown, ArrowLeft, ArrowRight, ArrowUp } from "./IosIcons";
 import { CrepeBuilder } from "@milkdown/crepe/builder";
 import { blockEdit } from "@milkdown/crepe/feature/block-edit";
 import { codeMirror } from "@milkdown/crepe/feature/code-mirror";
@@ -19,7 +19,7 @@ import { table } from "@milkdown/crepe/feature/table";
 import { toolbar } from "@milkdown/crepe/feature/toolbar";
 import { codeTheme } from "../lib/codeTheme";
 import { keepEditorLanguageMenusVisible } from "../lib/editorFloatingMenus";
-import { languages } from "@codemirror/language-data";
+import { codeEditingExtensions, codeLanguages } from "../lib/codeEditing";
 import { latex as lazyLatex } from "../lib/lazyLatex";
 import { editorViewCtx, remarkCtx, schemaCtx, serializerCtx } from "@milkdown/kit/core";
 import { insertImageInputRule } from "@milkdown/kit/preset/commonmark";
@@ -38,9 +38,12 @@ import { definitionSchema, imageReferenceSchema, installReferencePreservingRemar
 import { createMarkdownSnapshotCache } from "../lib/markdownSnapshot";
 import { autolinkInputRule, bareUrlInputRule, configureDoubleTildeOnly, enforceDoubleTildeInputRule, linkInputRule } from "../lib/markdownRules";
 import {
+  getTableColumnAlignment,
   getTableContext,
   handleTableKeyDown,
   insertTableDirection,
+  setTableColumnAlignment,
+  type TableAlignment,
   type TableInsertDirection
 } from "../lib/tableEditing";
 import {
@@ -76,6 +79,7 @@ interface TableBarState {
   top: number;
   left: number;
   canInsertRowBefore: boolean;
+  alignment: TableAlignment;
 }
 
 interface RichEditorProps {
@@ -168,7 +172,8 @@ const RichEditor = forwardRef<RichEditorHandle, RichEditorProps>(function RichEd
   const commitTableBar = (next: TableBarState | null) => {
     setTableBar((current) => current === next || (current && next &&
       current.top === next.top && current.left === next.left &&
-      current.canInsertRowBefore === next.canInsertRowBefore) ? current : next);
+      current.canInsertRowBefore === next.canInsertRowBefore &&
+      current.alignment === next.alignment) ? current : next);
   };
 
   useEffect(() => {
@@ -377,7 +382,7 @@ const RichEditor = forwardRef<RichEditorHandle, RichEditorProps>(function RichEd
         });
         const tableRect = tableElement.getBoundingClientRect();
         const toolbarHeight = 34;
-        const toolbarWidth = 232;
+        const toolbarWidth = 364;
         const minTop = Number.parseFloat(getComputedStyle(root).getPropertyValue("--h-chrome")) + 10 || 148;
         let top = tableRect.top - toolbarHeight - 10;
         if (top < minTop) top = tableRect.bottom + 10;
@@ -386,7 +391,12 @@ const RichEditor = forwardRef<RichEditorHandle, RichEditorProps>(function RichEd
           8,
           Math.min(tableRect.left + tableRect.width / 2 - toolbarWidth / 2, window.innerWidth - toolbarWidth - 8)
         );
-        commitTableBar({ top, left, canInsertRowBefore: context.rowIndex > 0 });
+        commitTableBar({
+          top,
+          left,
+          canInsertRowBefore: context.rowIndex > 0,
+          alignment: getTableColumnAlignment(context)
+        });
       } catch {
         commitTableBar(null);
       }
@@ -437,7 +447,11 @@ const RichEditor = forwardRef<RichEditorHandle, RichEditorProps>(function RichEd
         mode: "doc"
       })
       .addFeature(toolbar)
-      .addFeature(codeMirror, { theme: codeTheme, languages })
+      .addFeature(codeMirror, {
+        theme: codeTheme,
+        languages: codeLanguages,
+        extensions: codeEditingExtensions
+      })
       .addFeature(table)
       .addFeature(lazyLatex);
     crepe.editor.config(configureDoubleTildeOnly);
@@ -611,6 +625,14 @@ const RichEditor = forwardRef<RichEditorHandle, RichEditorProps>(function RichEd
     refreshTableBarRef.current();
   };
 
+  const applyTableAlignment = (alignment: TableAlignment) => {
+    const editor = crepeRef.current;
+    if (!editor) return;
+    const view = editor.editor.action((ctx) => ctx.get(editorViewCtx));
+    setTableColumnAlignment(view, alignment);
+    refreshTableBarRef.current();
+  };
+
   const closeTableBar = (focusEditor = true) => {
     commitTableBar(null);
     if (!focusEditor) return;
@@ -640,7 +662,7 @@ const RichEditor = forwardRef<RichEditorHandle, RichEditorProps>(function RichEd
           className="table-quickbar"
           style={{ top: tableBar.top, left: tableBar.left } as CSSProperties}
           role="toolbar"
-          aria-label="表格行列操作"
+          aria-label="表格行列与对齐操作"
           aria-keyshortcuts="Shift+F10"
           onKeyDown={(event) => {
             if (event.key !== "Escape") return;
@@ -694,6 +716,43 @@ const RichEditor = forwardRef<RichEditorHandle, RichEditorProps>(function RichEd
           >
             <ArrowRight size={13} />
             <span>列</span>
+          </button>
+          <span className="table-quickbar-separator" aria-hidden="true" />
+          <button
+            type="button"
+            className="table-quickbar-button table-quickbar-align"
+            title="当前列居左"
+            aria-label="当前列居左"
+            aria-pressed={tableBar.alignment === "left"}
+            onMouseDown={(event) => event.preventDefault()}
+            onClick={() => applyTableAlignment("left")}
+          >
+            <AlignLeft size={13} />
+            <span>左</span>
+          </button>
+          <button
+            type="button"
+            className="table-quickbar-button table-quickbar-align"
+            title="当前列居中"
+            aria-label="当前列居中"
+            aria-pressed={tableBar.alignment === "center"}
+            onMouseDown={(event) => event.preventDefault()}
+            onClick={() => applyTableAlignment("center")}
+          >
+            <AlignCenter size={13} />
+            <span>中</span>
+          </button>
+          <button
+            type="button"
+            className="table-quickbar-button table-quickbar-align"
+            title="当前列居右"
+            aria-label="当前列居右"
+            aria-pressed={tableBar.alignment === "right"}
+            onMouseDown={(event) => event.preventDefault()}
+            onClick={() => applyTableAlignment("right")}
+          >
+            <AlignRight size={13} />
+            <span>右</span>
           </button>
         </div>
       )}

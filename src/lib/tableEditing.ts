@@ -19,6 +19,8 @@ export type TableInsertDirection =
   | "col-before"
   | "col-after";
 
+export type TableAlignment = "left" | "center" | "right";
+
 export interface TableContext {
   table: NonNullable<ReturnType<typeof findTable>>;
   cell: NonNullable<ReturnType<typeof cellAround>>;
@@ -30,7 +32,7 @@ export interface TableContext {
 
 interface TableBlockSpec {
   header: string[];
-  alignments: Array<"left" | "center" | "right">;
+  alignments: TableAlignment[];
   columnCount: number;
   dividerColumnCount: number;
 }
@@ -97,7 +99,7 @@ function createTableNode(
     throw new Error("当前编辑器缺少 Markdown 表格节点");
   }
 
-  const makeCell = (text: string, align: "left" | "center" | "right", isHeader: boolean) => {
+  const makeCell = (text: string, align: TableAlignment, isHeader: boolean) => {
     const content = text
       ? paragraph.create(null, schema.text(text))
       : paragraph.create();
@@ -134,6 +136,41 @@ export function getTableContext(state: EditorState): TableContext | null {
     };
   } catch {
     return null;
+  }
+}
+
+export function getTableColumnAlignment(context: TableContext): TableAlignment {
+  try {
+    const map = TableMap.get(context.table.node);
+    const cellPos = map.positionAt(0, context.colIndex, context.table.node);
+    const alignment = context.table.node.nodeAt(cellPos)?.attrs.alignment;
+    return alignment === "center" || alignment === "right" ? alignment : "left";
+  } catch {
+    return "left";
+  }
+}
+
+export function setTableColumnAlignment(view: EditorView, alignment: TableAlignment): boolean {
+  const context = getTableContext(view.state);
+  if (!context) return false;
+  try {
+    const { table, colIndex } = context;
+    const map = TableMap.get(table.node);
+    const tr = view.state.tr;
+    const value = alignment === "left" ? null : alignment;
+    let changed = false;
+    for (let row = 0; row < map.height; row += 1) {
+      const cellPos = map.positionAt(row, colIndex, table.node);
+      const cell = table.node.nodeAt(cellPos);
+      if (!cell || (cell.attrs.alignment ?? null) === value) continue;
+      tr.setNodeAttribute(table.start + cellPos, "alignment", value);
+      changed = true;
+    }
+    if (changed) view.dispatch(tr);
+    window.requestAnimationFrame(() => view.focus());
+    return true;
+  } catch {
+    return false;
   }
 }
 

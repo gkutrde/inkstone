@@ -1,6 +1,6 @@
 # Inkstone
 
-> **v0.1.3：iOS 风格界面的 Windows Markdown 工作台。** 不是 iPhone 应用。改版设计见 [改版说明](docs/IOS-REDESIGN.md)，本轮验证与限制见 [发行记录](docs/RELEASE-0.1.3.md)。Windows 安装图标继续沿用原有资源。
+> **v0.1.4：增强表格对齐、代码补全与多行预览的 Windows Markdown 工作台。** 界面为 Windows 桌面应用，不是 iPhone 应用。本轮验证与限制见 [发行记录](docs/RELEASE-0.1.4.md)，既有视觉设计见 [改版说明](docs/IOS-REDESIGN.md)。
 
 一个用 Rust 与 Tauri 构建的本地优先 Markdown 写作工作台。界面与交互为原创实现，不复刻 Typora 的品牌、主题或专有资源。
 

@@ -66,6 +66,18 @@ const checkedCircle: readonly IconPath[] = [
   "M8 12.1l2.7 2.9 5.5-5.8"
 ];
 
+export const AlignLeft = createIcon("AlignLeft", [
+  "M4.5 6h15M4.5 12h9M4.5 18h15"
+]);
+
+export const AlignCenter = createIcon("AlignCenter", [
+  "M6 6h12M4.5 12h15M6 18h12"
+]);
+
+export const AlignRight = createIcon("AlignRight", [
+  "M4.5 6h15M10.5 12h9M4.5 18h15"
+]);
+
 export const AlertCircle = createIcon("AlertCircle", [
   circleOutline,
   "M12 7.3v5.2M12 16.4h.02"
