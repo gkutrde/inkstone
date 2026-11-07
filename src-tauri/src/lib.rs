@@ -472,17 +472,39 @@ fn save_image(workspace: String, file_name: String, bytes: Vec<u8>) -> Result<St
     Err("无法分配唯一的图片文件名。".into())
 }
 
+#[derive(Serialize)]
+#[serde(rename_all = "camelCase")]
+struct SearchHit {
+    name: String,
+    path: String,
+    snippet: String,
+    line: usize,
+    match_count: usize,
+}
+
+#[derive(Serialize)]
+#[serde(rename_all = "camelCase")]
+struct SearchResponse {
+    items: Vec<SearchHit>,
+    truncated: bool,
+    skipped: usize,
+}
+
+const MAX_SEARCH_FILE_BYTES: u64 = 2 * 1024 * 1024;
+
 #[tauri::command(async)]
-fn search_workspace(root: String, query: String) -> Result<Vec<FileNode>, String> {
+fn search_workspace(root: String, query: String) -> Result<SearchResponse, String> {
     let root_path = PathBuf::from(&root);
     if !root_path.is_dir() {
         return Err(format!("搜索位置不是目录: {root}"));
     }
     let needle = query.trim().to_lowercase();
     if needle.is_empty() {
-        return Ok(Vec::new());
+        return Ok(SearchResponse { items: Vec::new(), truncated: false, skipped: 0 });
     }
-    let mut results = Vec::new();
+    let mut items = Vec::new();
+    let mut truncated = false;
+    let mut skipped = 0;
     for entry in WalkDir::new(&root_path)
         .max_depth(MAX_DIRECTORY_DEPTH)
         .into_iter()
@@ -505,35 +527,62 @@ fn search_workspace(root: String, query: String) -> Result<Vec<FileNode>, String
         .flatten()
     {
         let path = entry.path();
-        if entry.file_type().is_file() && is_markdown_file(path) {
-            let Some(path_text) = path.to_str() else {
-                continue;
-            };
-            if let Ok(content) = fs::read_to_string(path) {
-                if content.to_lowercase().contains(&needle) {
-                    results.push(FileNode {
-                        name: path
-                            .file_name()
-                            .map(|name| name.to_string_lossy().to_string())
-                            .unwrap_or_default(),
-                        path: path_text.to_string(),
-                        is_dir: false,
-                        children: Vec::new(),
-                    });
-                    if results.len() >= MAX_SEARCH_RESULTS {
+        if !entry.file_type().is_file() || !is_markdown_file(path) {
+            continue;
+        }
+        let Some(path_text) = path.to_str() else {
+            skipped += 1;
+            continue;
+        };
+        let oversized = fs::metadata(path)
+            .map(|metadata| metadata.len() > MAX_SEARCH_FILE_BYTES)
+            .unwrap_or(false);
+        if oversized {
+            skipped += 1;
+            continue;
+        }
+        match fs::read_to_string(path) {
+            Ok(content) => {
+                let haystack = content.to_lowercase();
+                if !haystack.contains(&needle) {
+                    continue;
+                }
+                let match_count = haystack.matches(&needle).count();
+                let mut first_line = 1;
+                let mut snippet = String::new();
+                for (index, line) in content.lines().enumerate() {
+                    if line.to_lowercase().contains(&needle) {
+                        first_line = index + 1;
+                        snippet = line.trim().chars().take(180).collect();
                         break;
                     }
                 }
+                items.push(SearchHit {
+                    name: path
+                        .file_name()
+                        .map(|name| name.to_string_lossy().to_string())
+                        .unwrap_or_default(),
+                    path: path_text.to_string(),
+                    snippet,
+                    line: first_line,
+                    match_count,
+                });
+                if items.len() > MAX_SEARCH_RESULTS {
+                    truncated = true;
+                    break;
+                }
             }
+            Err(_) => skipped += 1,
         }
     }
-    results.sort_by(|left, right| {
+    items.truncate(MAX_SEARCH_RESULTS);
+    items.sort_by(|left, right| {
         left.name
             .to_lowercase()
             .cmp(&right.name.to_lowercase())
             .then_with(|| left.path.cmp(&right.path))
     });
-    Ok(results)
+    Ok(SearchResponse { items, truncated, skipped })
 }
 
 #[tauri::command]
@@ -799,8 +848,8 @@ mod tests {
         assert!(!Path::new(&file).exists());
         assert!(Path::new(&folder).is_dir());
         let matches = search_workspace(root_text.clone(), "needle".into()).expect("search");
-        assert_eq!(matches.len(), 1);
-        assert_eq!(matches[0].name, "final.md");
+        assert_eq!(matches.items.len(), 1);
+        assert_eq!(matches.items[0].name, "final.md");
         let export = root.join("export.html");
         write_export(export.to_string_lossy().to_string(), "<h1>ok</h1>".into()).expect("export");
         assert!(export.exists());
@@ -860,11 +909,32 @@ mod tests {
         fs::create_dir_all(&deep).unwrap();
         fs::write(deep.join("deep.md"), "needle deep").unwrap();
         let matches = search_workspace(root.to_string_lossy().to_string(), "needle".into()).unwrap();
-        assert_eq!(matches.len(), 2);
-        assert!(matches.iter().any(|item| item.name == ".hidden.md"));
-        assert!(matches.iter().any(|item| item.name == "deep.md"));
+        assert_eq!(matches.items.len(), 2);
+        assert!(matches.items.iter().any(|item| item.name == ".hidden.md"));
+        assert!(matches.items.iter().any(|item| item.name == "deep.md"));
         assert!(search_workspace(parent.join("missing").to_string_lossy().to_string(), "needle".into()).is_err());
         fs::remove_dir_all(&parent).ok();
+    }
+
+    #[test]
+    fn search_reports_truncation_and_skipped_files() {
+        let root = temp_workspace("search-limits");
+        for index in 0..=MAX_SEARCH_RESULTS {
+            fs::write(root.join(format!("note-{index}.md")), "needle").unwrap();
+        }
+        fs::write(root.join("large.md"), vec![b'x'; MAX_SEARCH_FILE_BYTES as usize + 1]).unwrap();
+        fs::write(root.join("invalid.md"), [0xff, 0xfe, 0xfd]).unwrap();
+        let response = search_workspace(root.to_string_lossy().to_string(), "needle".into()).unwrap();
+        assert!(response.truncated);
+        assert_eq!(response.items.len(), MAX_SEARCH_RESULTS);
+        assert_eq!(response.skipped, 2);
+
+        fs::remove_file(root.join("note-50.md")).unwrap();
+        let exact_limit = search_workspace(root.to_string_lossy().to_string(), "needle".into()).unwrap();
+        assert!(!exact_limit.truncated);
+        assert_eq!(exact_limit.items.len(), MAX_SEARCH_RESULTS);
+        assert_eq!(exact_limit.skipped, 2);
+        fs::remove_dir_all(&root).ok();
     }
 
     #[cfg(target_os = "windows")]

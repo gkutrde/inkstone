@@ -11,6 +11,7 @@ interface FindBarProps {
   onReplacementChange: (value: string) => void;
   onNext: () => void;
   onPrevious: () => void;
+  onReplaceCurrent: () => void;
   onReplaceAll: () => void;
   onClose: () => void;
 }
@@ -24,6 +25,7 @@ export default function FindBar({
   onReplacementChange,
   onNext,
   onPrevious,
+  onReplaceCurrent,
   onReplaceAll,
   onClose
 }: FindBarProps) {
@@ -87,6 +89,9 @@ export default function FindBar({
             }
           }}
         />
+        <button className="text-button compact" onClick={onReplaceCurrent} disabled={!query}>
+          <Replace size={14} /> 替换
+        </button>
         <button className="text-button compact" onClick={onReplaceAll} disabled={!query}>
           <Replace size={14} /> 全部替换
         </button>

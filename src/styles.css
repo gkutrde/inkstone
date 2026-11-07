@@ -706,7 +706,7 @@ kbd,
   width: 100%;
   display: grid;
   grid-template-columns: 15px minmax(0, 1fr);
-  grid-template-rows: auto auto;
+  grid-template-rows: auto auto auto;
   column-gap: 8px;
   row-gap: 2px;
   padding: 8px;
@@ -721,7 +721,7 @@ kbd,
 }
 
 .search-result svg {
-  grid-row: 1 / span 2;
+  grid-row: 1 / span 3;
   margin-top: 2px;
   color: var(--ink-4);
 }
@@ -739,6 +739,22 @@ kbd,
   overflow: hidden;
   text-overflow: ellipsis;
   white-space: nowrap;
+}
+
+.search-result .search-snippet {
+  grid-column: 2;
+  font-family: var(--font-mono);
+  color: var(--ink-3);
+}
+
+.search-skip-note {
+  margin: 8px;
+  padding: 8px;
+  border-radius: 6px;
+  background: var(--wash);
+  color: var(--ink-4);
+  font-size: 11px;
+  line-height: 1.6;
 }
 
 .sidebar-empty-copy {
@@ -3250,7 +3266,7 @@ html[data-theme="night"] .source-editor-shell .cm-editor .cm-selectionBackground
 .table-quickbar {
   position: fixed;
   z-index: 70;
-  width: 364px;
+  width: 470px;
   max-width: calc(100vw - 16px);
   height: 34px;
   display: flex;

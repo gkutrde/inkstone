@@ -265,22 +265,39 @@
   function searchWorkspace(args) {
     var root = normPath(args.root);
     var needle = String(args.query == null ? "" : args.query).trim().toLowerCase();
-    if (!needle) return [];
+    if (!needle) return { items: [], truncated: false, skipped: 0 };
     if (!dirs[root]) throw "搜索位置不是目录: " + root;
     var scope = root.toLowerCase() + "/";
-    var results = [];
+    var items = [];
+    var truncated = false;
+    var skipped = 0;
+    var invalid = window.__PERF_INVALID_UTF8 || [];
     Object.keys(files).forEach(function (file) {
       if (file.toLowerCase().indexOf(scope) !== 0) return;
       if (MARKDOWN_EXT.indexOf(extOf(file)) < 0) return;
-      var hit = files[file].toLowerCase().indexOf(needle) >= 0 ||
-        baseOf(file).toLowerCase().indexOf(needle) >= 0;
-      if (!hit) return;
-      results.push({ name: baseOf(file), path: file, isDir: false, children: [] });
+      var text = String(files[file]);
+      if (text.length > 2 * 1024 * 1024 || invalid.indexOf(file) >= 0) {
+        skipped += 1;
+        return;
+      }
+      var lower = text.toLowerCase();
+      if (lower.indexOf(needle) < 0) return;
+      var count = lower.split(needle).length - 1;
+      var lines = text.split(/\r?\n/);
+      var lineIndex = lines.findIndex(function (line) { return line.toLowerCase().indexOf(needle) >= 0; });
+      items.push({
+        name: baseOf(file),
+        path: file,
+        snippet: (lineIndex >= 0 ? lines[lineIndex].trim() : "").slice(0, 180),
+        line: lineIndex >= 0 ? lineIndex + 1 : 1,
+        matchCount: count
+      });
+      if (items.length > 50) truncated = true;
     });
-    results.sort(function (a, b) {
+    items.sort(function (a, b) {
       return a.path.toLowerCase() < b.path.toLowerCase() ? -1 : 1;
     });
-    return results;
+    return { items: items.slice(0, 50), truncated: truncated, skipped: skipped };
   }
 
   function saveImage(args) {

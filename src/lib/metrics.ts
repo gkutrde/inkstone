@@ -27,9 +27,15 @@ export function extractOutline(markdown: string): OutlineItem[] {
   const lineOffset = parts.prefix ? parts.prefix.split(/\r?\n/).length - 1 : 0;
   const lines = parts.body.split(/\r?\n/);
   let fence: Fence | null = null;
+  let inComment = false;
   let setextCandidate: { text: string; line: number } | null = null;
 
   lines.forEach((line, index) => {
+    if (inComment) {
+      if (line.includes("-->")) inComment = false;
+      setextCandidate = null;
+      return;
+    }
     if (fence) {
       if (isFenceClose(line, fence)) fence = null;
       setextCandidate = null;
@@ -42,6 +48,11 @@ export function extractOutline(markdown: string): OutlineItem[] {
       return;
     }
 
+    if (line.includes("<!--")) {
+      if (!line.includes("-->")) inComment = true;
+      setextCandidate = null;
+      return;
+    }
     const atx = /^( {0,3})(#{1,6})(?:[ \t]+(.*)|[ \t]*)$/.exec(line);
     if (atx) {
       const text = outlineText(atx[3] ?? "");

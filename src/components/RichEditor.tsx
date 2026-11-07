@@ -6,7 +6,7 @@ import {
   useState
 } from "react";
 import type { CSSProperties } from "react";
-import { AlignCenter, AlignLeft, AlignRight, ArrowDown, ArrowLeft, ArrowRight, ArrowUp } from "./IosIcons";
+import { AlignCenter, AlignLeft, AlignRight, ArrowDown, ArrowLeft, ArrowRight, ArrowUp, Minus } from "./IosIcons";
 import { CrepeBuilder } from "@milkdown/crepe/builder";
 import { blockEdit } from "@milkdown/crepe/feature/block-edit";
 import { codeMirror } from "@milkdown/crepe/feature/code-mirror";
@@ -37,14 +37,17 @@ import { saveImage } from "../lib/api";
 import { inkstoneImageBlockSchema, syncImageAltText } from "../lib/imageBlockSchema";
 import { definitionSchema, imageReferenceSchema, installReferencePreservingRemark, linkReferenceSchema, syncReferenceDocument } from "../lib/referenceSchema";
 import { createMarkdownSnapshotCache } from "../lib/markdownSnapshot";
+import { tableSoftBreakRemark } from "../lib/tableSoftBreak";
 import { autolinkInputRule, bareUrlInputRule, configureDoubleTildeOnly, enforceDoubleTildeInputRule, linkInputRule } from "../lib/markdownRules";
 import {
   getTableColumnAlignment,
   getTableContext,
+  deleteTableTarget,
   handleTableKeyDown,
   insertTableDirection,
   setTableColumnAlignment,
   type TableAlignment,
+  type TableDeleteTarget,
   type TableInsertDirection
 } from "../lib/tableEditing";
 import {
@@ -72,6 +75,7 @@ export interface RichEditorHandle {
   redo: () => boolean;
   countMatches: (query: string) => number;
   replaceAllVisible: (query: string, replacement: string) => number;
+  replaceCurrentVisible: (query: string, replacement: string) => boolean;
   findNext: (query: string, backwards?: boolean) => boolean;
   focus: () => void;
   scrollToHeading: (index: number) => boolean;
@@ -81,6 +85,8 @@ interface TableBarState {
   top: number;
   left: number;
   canInsertRowBefore: boolean;
+  deleteRowDisabledReason: string | null;
+  deleteColumnDisabledReason: string | null;
   alignment: TableAlignment;
 }
 
@@ -258,6 +264,17 @@ const RichEditor = forwardRef<RichEditorHandle, RichEditorProps>(function RichEd
       view.dispatch(tr.scrollIntoView());
       return matches.length;
     },
+    replaceCurrentVisible: (query: string, replacement: string) => {
+      const view = liveViewRef.current;
+      if (!view || !query || composingRef.current) return false;
+      const matches = findTextMatches(view, query);
+      if (!matches.length) return false;
+      const selection = view.state.selection;
+      const match = matches.find((item) => item.from === selection.from && item.to === selection.to) ?? matches[0];
+      userInteractedRef.current = true;
+      view.dispatch(view.state.tr.insertText(replacement, match.from, match.to).scrollIntoView());
+      return true;
+    },
     findNext: (query: string, backwards = false) => {
       const view = liveViewRef.current;
       if (!view || !query) return false;
@@ -268,7 +285,6 @@ const RichEditor = forwardRef<RichEditorHandle, RichEditorProps>(function RichEd
         ? [...matches].reverse().find((item) => item.from < selection.from) ?? matches[matches.length - 1]
         : matches.find((item) => item.from >= selection.to) ?? matches[0];
       view.dispatch(view.state.tr.setSelection(TextSelection.create(view.state.doc, match.from, match.to)).scrollIntoView());
-      view.focus();
       return true;
     },
     focus: () => {
@@ -398,7 +414,7 @@ const RichEditor = forwardRef<RichEditorHandle, RichEditorProps>(function RichEd
         });
         const tableRect = tableElement.getBoundingClientRect();
         const toolbarHeight = 34;
-        const toolbarWidth = 364;
+        const toolbarWidth = 470;
         const minTop = Number.parseFloat(getComputedStyle(root).getPropertyValue("--h-chrome")) + 10 || 148;
         let top = tableRect.top - toolbarHeight - 10;
         if (top < minTop) top = tableRect.bottom + 10;
@@ -411,6 +427,12 @@ const RichEditor = forwardRef<RichEditorHandle, RichEditorProps>(function RichEd
           top,
           left,
           canInsertRowBefore: context.rowIndex > 0,
+          deleteRowDisabledReason: context.rowIndex === 0
+            ? "表头行不能删除"
+            : context.rowCount <= 2
+              ? "至少保留一行数据"
+              : null,
+          deleteColumnDisabledReason: context.colCount <= 1 ? "至少保留一列" : null,
           alignment: getTableColumnAlignment(context)
         });
       } catch {
@@ -476,6 +498,7 @@ const RichEditor = forwardRef<RichEditorHandle, RichEditorProps>(function RichEd
     crepe.editor.use(linkReferenceSchema);
     crepe.editor.use(imageReferenceSchema);
     crepe.editor.use(definitionSchema);
+    crepe.editor.use(tableSoftBreakRemark);
     // Typora-style immediate rendering for CommonMark links, images and autolinks.
     crepe.editor.use(linkInputRule);
     crepe.editor.use(autolinkInputRule);
@@ -641,6 +664,14 @@ const RichEditor = forwardRef<RichEditorHandle, RichEditorProps>(function RichEd
     refreshTableBarRef.current();
   };
 
+  const applyTableDelete = (target: TableDeleteTarget) => {
+    const editor = crepeRef.current;
+    if (!editor) return;
+    const view = editor.editor.action((ctx) => ctx.get(editorViewCtx));
+    deleteTableTarget(view, target);
+    refreshTableBarRef.current();
+  };
+
   const applyTableAlignment = (alignment: TableAlignment) => {
     const editor = crepeRef.current;
     if (!editor) return;
@@ -732,6 +763,31 @@ const RichEditor = forwardRef<RichEditorHandle, RichEditorProps>(function RichEd
             onClick={() => applyTableDirection("col-after")}
           >
             <ArrowRight size={13} />
+            <span>列</span>
+          </button>
+          <span className="table-quickbar-separator" aria-hidden="true" />
+          <button
+            type="button"
+            className="table-quickbar-button"
+            title={tableBar.deleteRowDisabledReason ?? "删除当前行"}
+            aria-label="删除当前行"
+            disabled={tableBar.deleteRowDisabledReason !== null}
+            onMouseDown={(event) => event.preventDefault()}
+            onClick={() => applyTableDelete("row")}
+          >
+            <Minus size={13} />
+            <span>行</span>
+          </button>
+          <button
+            type="button"
+            className="table-quickbar-button"
+            title={tableBar.deleteColumnDisabledReason ?? "删除当前列"}
+            aria-label="删除当前列"
+            disabled={tableBar.deleteColumnDisabledReason !== null}
+            onMouseDown={(event) => event.preventDefault()}
+            onClick={() => applyTableDelete("column")}
+          >
+            <Minus size={13} />
             <span>列</span>
           </button>
           <span className="table-quickbar-separator" aria-hidden="true" />

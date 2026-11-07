@@ -80,6 +80,13 @@ import {
 } from "./lib/api";
 import { extractOutline, countText } from "./lib/metrics";
 import { baseName, normalizeSlashes, withMarkdownExtension } from "./lib/path";
+import {
+  isPathAffected,
+  remapAffectedPath,
+  removeRecentEntries,
+  renameRecentEntries,
+  type RecentEntry
+} from "./lib/recentPaths";
 import { loadDrafts, persistDrafts } from "./lib/drafts";
 import {
   beginCommit,
@@ -100,12 +107,6 @@ const SETTINGS_KEY = "inkstone.settings.v1";
 const WORKSPACE_KEY = "inkstone.workspace.v1";
 const WORKSPACES_KEY = "inkstone.workspaces.v1";
 const RECENT_KEY = "inkstone.recent.v1";
-
-interface RecentEntry {
-  path: string;
-  name: string;
-  at: number;
-}
 
 interface ToastState {
   message: string;
@@ -274,7 +275,8 @@ export default function App() {
   const findReturnFocusRef = useRef<HTMLElement | null>(null);
   // Latest openDocument for one-shot callbacks (launch file / second instance).
   const openPathHandlerRef = useRef<(path: string) => void>(() => undefined);
-  const scrollContextRef = useRef<{ ratio: number } | null>(null);
+  const scrollContextsRef = useRef(new Map<string, { ratio: number }>());
+  const scrollRestoreRevisionRef = useRef(0);
   const savedRevisionsRef = useRef(new Map<string, number>());
   const saveQueues = useRef(new Map<string, Promise<void>>());
   const saveRetryCountRef = useRef(new Map<string, number>());
@@ -395,6 +397,7 @@ export default function App() {
     const currentId = activeIdRef.current;
     if (id === currentId) return;
     if (currentId) {
+      captureScrollContext();
       const currentTab = tabsRef.current.find((tab) => tab.id === currentId) ?? null;
       flushTabContent(currentTab);
     }
@@ -439,6 +442,41 @@ export default function App() {
       ].slice(0, 18);
       return next;
     });
+  };
+
+  const updateRecentAfterRename = (oldPath: string, newPath: string, isDirectory: boolean): string | null => {
+    const remap = (path: string) => remapAffectedPath(path, oldPath, newPath, isDirectory);
+    setRecent((current) => renameRecentEntries(current, oldPath, newPath, isDirectory));
+    setRecentWorkspaces((current) => {
+      const next = current.map(remap);
+      localStorage.setItem(WORKSPACES_KEY, JSON.stringify(next));
+      return next;
+    });
+    if (!workspace) return null;
+    const nextWorkspace = remap(workspace);
+    if (nextWorkspace !== workspace) {
+      setWorkspace(nextWorkspace);
+      localStorage.setItem(WORKSPACE_KEY, nextWorkspace);
+    }
+    return nextWorkspace;
+  };
+
+  const removeRecentAfterTrash = (path: string, isDirectory: boolean): boolean => {
+    const removed = (candidate: string) => isPathAffected(candidate, path, isDirectory);
+    setRecent((current) => removeRecentEntries(current, path, isDirectory));
+    setRecentWorkspaces((current) => {
+      const next = current.filter((item) => !removed(item));
+      localStorage.setItem(WORKSPACES_KEY, JSON.stringify(next));
+      return next;
+    });
+    const currentWorkspaceRemoved = workspace !== null && removed(workspace);
+    if (currentWorkspaceRemoved) {
+      workspaceRequestRef.current += 1;
+      setWorkspace(null);
+      setTree([]);
+      localStorage.removeItem(WORKSPACE_KEY);
+    }
+    return currentWorkspaceRemoved;
   };
 
   const refreshTree = async (root = workspace) => {
@@ -931,7 +969,8 @@ export default function App() {
             return tab;
           })
         );
-        await refreshTree();
+        const nextWorkspace = updateRecentAfterRename(node.path, created, node.isDir);
+        await refreshTree(nextWorkspace);
       }
     });
   };
@@ -957,6 +996,7 @@ export default function App() {
     if (!confirmed) return;
     try {
       await trashPath(node.path);
+      const currentWorkspaceRemoved = removeRecentAfterTrash(node.path, node.isDir);
       const normalizedNode = normalizeSlashes(node.path);
       const next = tabsRef.current.filter((tab) => {
         if (!tab.path) return true;
@@ -969,7 +1009,7 @@ export default function App() {
       if (activeGone && activeIdRef.current) cancelTask("content:" + activeIdRef.current);
       setTabs(next);
       if (activeGone) setActiveId(next[0]?.id ?? null);
-      await refreshTree();
+      if (!currentWorkspaceRemoved) await refreshTree();
       showToast("已移到回收站", "success");
     } catch (error) {
       showToast(String(error), "error");
@@ -1075,28 +1115,37 @@ export default function App() {
     }
     return document.querySelector<HTMLElement>(".editor-viewport");
   };
+  const scrollKey = (id: string | null, mode: EditorMode | undefined) => (id ?? "null") + ":" + (mode ?? "rich");
   const captureScrollContext = () => {
     const scroller = findScrollable();
-    if (!scroller) return;
+    if (!scroller || !activeIdRef.current) return;
     const max = scroller.scrollHeight - scroller.clientHeight;
-    scrollContextRef.current = { ratio: max > 0 ? scroller.scrollTop / max : 0 };
+    scrollContextsRef.current.set(scrollKey(activeIdRef.current, activeTab?.mode), {
+      ratio: max > 0 ? scroller.scrollTop / max : 0
+    });
   };
   const restoreScrollContext = () => {
-    const saved = scrollContextRef.current;
-    scrollContextRef.current = null;
+    const id = activeIdRef.current;
+    const key = scrollKey(id, activeTab?.mode);
+    const saved = scrollContextsRef.current.get(key);
     if (!saved) return;
-    window.requestAnimationFrame(() => {
-      window.requestAnimationFrame(() => {
-        const scroller = findScrollable();
-        if (!scroller) return;
-        const max = scroller.scrollHeight - scroller.clientHeight;
-        if (max <= 0) return;
-        const previous = scroller.style.scrollBehavior;
-        scroller.style.scrollBehavior = "auto";
-        scroller.scrollTop = Math.round(saved.ratio * max);
-        scroller.style.scrollBehavior = previous;
-      });
-    });
+    const revision = ++scrollRestoreRevisionRef.current;
+    const apply = () => {
+      if (revision !== scrollRestoreRevisionRef.current || activeIdRef.current !== id) return;
+      const scroller = findScrollable();
+      if (!scroller) return;
+      const max = scroller.scrollHeight - scroller.clientHeight;
+      if (max <= 0) return;
+      const previous = scroller.style.scrollBehavior;
+      scroller.style.scrollBehavior = "auto";
+      scroller.scrollTop = Math.round(saved.ratio * max);
+      scroller.style.scrollBehavior = previous;
+      scrollContextsRef.current.delete(key);
+    };
+    window.requestAnimationFrame(() => window.requestAnimationFrame(apply));
+    // Milkdown can still settle paragraph layout after ready; apply once more
+    // after that pass so native anchoring does not override the restored ratio.
+    window.setTimeout(apply, 80);
   };
 
   const handleRichReady = () => {
@@ -1182,6 +1231,23 @@ export default function App() {
     contentSnapshotRef.current = next;
     updateActiveContent(next);
     showToast("已替换 " + count + " 处", "success");
+  };
+
+  const replaceCurrent = () => {
+    if (!activeTab || !findQuery) return;
+    const applied = activeTab.mode === "rich"
+      ? richRef.current?.replaceCurrentVisible(findQuery, replacement)
+      : sourceRef.current?.replaceCurrent(findQuery, replacement);
+    if (!applied) {
+      showToast("没有可替换的匹配。", "info");
+      return;
+    }
+    const next = flushTabContent(activeTab);
+    if (next !== null) {
+      contentSnapshotRef.current = next;
+      updateActiveContent(next);
+    }
+    showToast("已替换 1 处", "success");
   };
 
   const jumpOutline = (item: OutlineItem, index: number) => {
@@ -2156,6 +2222,7 @@ export default function App() {
                   onReplacementChange={setReplacement}
                   onNext={() => jumpToMatch(false)}
                   onPrevious={() => jumpToMatch(true)}
+                  onReplaceCurrent={replaceCurrent}
                   onReplaceAll={replaceAll}
                   onClose={closeFind}
                 />

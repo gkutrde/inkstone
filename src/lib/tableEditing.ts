@@ -8,6 +8,8 @@ import {
   addRowAfter,
   addRowBefore,
   cellAround,
+  deleteColumn,
+  deleteRow,
   findTable,
   TableMap,
   tableNodeTypes
@@ -20,6 +22,7 @@ export type TableInsertDirection =
   | "col-after";
 
 export type TableAlignment = "left" | "center" | "right";
+export type TableDeleteTarget = "row" | "column";
 
 export interface TableContext {
   table: NonNullable<ReturnType<typeof findTable>>;
@@ -294,6 +297,34 @@ export function insertTableDirection(view: EditorView, direction: TableInsertDir
   return executeDirectionWithSelection(view, direction);
 }
 
+export function deleteTableTarget(view: EditorView, target: TableDeleteTarget): boolean {
+  const context = getTableContext(view.state);
+  if (!context) return false;
+  if (target === "row" && (context.rowIndex === 0 || context.rowCount <= 2)) return false;
+  if (target === "column" && context.colCount <= 1) return false;
+
+  const command = target === "row" ? deleteRow : deleteColumn;
+  let dispatched = false;
+  command(view.state, (tr) => {
+    const tableAfter = findTable(tr.selection.$from);
+    if (tableAfter) {
+      try {
+        const mapAfter = TableMap.get(tableAfter.node);
+        const row = Math.max(target === "row" ? 1 : 0, Math.min(context.rowIndex, mapAfter.height - 1));
+        const col = Math.min(context.colIndex, mapAfter.width - 1);
+        const cellPos = tableAfter.start + mapAfter.positionAt(row, col, tableAfter.node);
+        tr.setSelection(TextSelection.near(tr.doc.resolve(Math.min(cellPos + 2, tr.doc.content.size)), 1));
+      } catch {
+        /* keep the command's default selection when no equivalent cell remains */
+      }
+    }
+    dispatched = true;
+    view.dispatch(tr.scrollIntoView());
+  });
+  if (dispatched) window.requestAnimationFrame(() => view.focus());
+  return dispatched;
+}
+
 function addRowAtEnd(view: EditorView): boolean {
   const context = getTableContext(view.state);
   if (!context) return false;
@@ -375,6 +406,12 @@ export function handleTableKeyDown(
     if (!view.state.selection.empty) return false;
     if (event.ctrlKey || event.metaKey) return exitTable(view);
     if (event.altKey) return false;
+    if (event.shiftKey) {
+      const hardbreak = view.state.schema.nodes.hardbreak;
+      if (!hardbreak) return false;
+      view.dispatch(view.state.tr.replaceSelectionWith(hardbreak.create()).scrollIntoView());
+      return true;
+    }
     return moveDownOrAddRow(view);
   }
   if (event.key === "Tab" && !event.shiftKey) {

@@ -5,6 +5,20 @@ export interface FileNode {
   children: FileNode[];
 }
 
+export interface SearchHit {
+  name: string;
+  path: string;
+  snippet: string;
+  line: number;
+  matchCount: number;
+}
+
+export interface SearchResponse {
+  items: SearchHit[];
+  truncated: boolean;
+  skipped: number;
+}
+
 export interface TextDocument {
   path: string;
   name: string;

@@ -1,7 +1,7 @@
 {
   "name": "inkstone",
   "private": true,
-  "version": "0.1.5",
+  "version": "0.1.6",
   "description": "A local-first Markdown writing studio for Windows with Tauri, React and Rust.",
   "license": "MIT",
   "repository": {
@@ -19,7 +19,7 @@
     "preview": "vite preview",
     "test:ui": "node scripts/ios-ui-check.mjs",
     "tauri": "tauri",
-    "test:review": "python scripts/comprehensive-review-e2e.py && python scripts/replace-all-regression.py && python scripts/remaining-features-e2e.py",
+    "test:review": "python scripts/comprehensive-review-e2e.py && python scripts/replace-all-regression.py && python scripts/remaining-features-e2e.py && node scripts/recent-paths-regression.mjs",
     "test:markdown": "python scripts/markdown-syntax-e2e.py --label current",
     "test:perf:source": "python scripts/perf/source_typing_e2e.py --model ascii && python scripts/perf/source_typing_e2e.py --model cjk"
   },

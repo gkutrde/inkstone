@@ -19,7 +19,7 @@ import {
   ShieldCheck,
   Trash2
 } from "./IosIcons";
-import type { FileNode } from "../types";
+import type { FileNode, SearchResponse } from "../types";
 import { searchWorkspace } from "../lib/api";
 import { baseName, normalizeSlashes } from "../lib/path";
 import { useModalA11y } from "../lib/useModalA11y";
@@ -154,7 +154,7 @@ export default function Sidebar({
   const [expanded, setExpanded] = useState<Set<string>>(new Set());
   const [focusedPath, setFocusedPath] = useState<string | null>(null);
   const [query, setQuery] = useState("");
-  const [results, setResults] = useState<FileNode[] | null>(null);
+  const [results, setResults] = useState<SearchResponse | null>(null);
   const [searching, setSearching] = useState(false);
   const [searchError, setSearchError] = useState<string | null>(null);
   const [searchNonce, setSearchNonce] = useState(0);
@@ -203,7 +203,7 @@ export default function Sidebar({
         })
         .catch((reason) => {
           if (!disposed) {
-            setResults([]);
+            setResults({ items: [], truncated: false, skipped: 0 });
             setSearchError(reason instanceof Error ? reason.message : String(reason));
           }
         })
@@ -384,7 +384,13 @@ export default function Sidebar({
             {results !== null ? (
               <div className="search-results">
                 <div className="tree-section-label" aria-live="polite">
-                  {searching ? "搜索中…" : searchError ? "搜索失败" : results.length + " 个结果"}
+                  {searching
+                    ? "搜索中…"
+                    : searchError
+                      ? "搜索失败"
+                      : results.truncated
+                        ? "已达到 50 个文件上限（结果已截断）"
+                        : results.items.length + " 个结果"}
                 </div>
                 {searchError ? (
                   <div className="sidebar-search-error" role="alert">
@@ -396,7 +402,7 @@ export default function Sidebar({
                   </div>
                 ) : (
                   <>
-                    {results.map((node) => (
+                    {results.items.map((node) => (
                       <button
                         key={node.path}
                         className="search-result"
@@ -405,10 +411,14 @@ export default function Sidebar({
                       >
                         <FileText size={14} />
                         <span>{node.name}</span>
-                        <small>{normalizeSlashes(node.path).replace(normalizeSlashes(workspace) + "/", "")}</small>
+                        <small>第 {node.line} 行 · {node.matchCount} 处命中</small>
+                        {node.snippet && <small className="search-snippet">{node.snippet}</small>}
                       </button>
                     ))}
-                    {!searching && results.length === 0 && (
+                    {!searching && results.skipped > 0 && (
+                      <p className="search-skip-note">另有 {results.skipped} 个文件因超过 2 MiB 或无法以 UTF-8 读取而跳过。</p>
+                    )}
+                    {!searching && results.items.length === 0 && (
                       <p className="sidebar-empty-copy">没有匹配的文档。</p>
                     )}
                   </>

@@ -1,7 +1,7 @@
 import { invoke } from "@tauri-apps/api/core";
 import { open, save } from "@tauri-apps/plugin-dialog";
 import { openUrl } from "@tauri-apps/plugin-opener";
-import type { FileNode, SaveResult, TextDocument } from "../types";
+import type { FileNode, SaveResult, SearchResponse, TextDocument } from "../types";
 
 export async function readWorkspace(path: string): Promise<FileNode[]> {
   return invoke("read_workspace", { path });
@@ -56,7 +56,7 @@ export async function readExportImage(path: string): Promise<number[]> {
   return invoke("read_export_image", { path });
 }
 
-export async function searchWorkspace(root: string, query: string): Promise<FileNode[]> {
+export async function searchWorkspace(root: string, query: string): Promise<SearchResponse> {
   return invoke("search_workspace", { root, query });
 }
 

@@ -376,6 +376,8 @@ def main() -> None:
                 assert "$0" not in item["afterTab"], key + " 片段残留了字面占位符"
                 assert "代码片段" in item["tooltipText"], key + " 未加载常用语言片段"
                 assert item["afterSecondTab"] == item["afterTab"], key + " 片段字段导航意外插入缩进"
+                assert "\t" not in item["afterTab"], key + " 片段仍包含 Tab 缩进"
+                assert "function name(params) {\n    \n  }" in item["afterTab"], key + " 片段未按每级 2 空格缩进"
             assert re.search(r"def main\(\):\n[ \t]+", results["python_enter"]), "Python Enter 未自动缩进"
             assert re.search(r"<div>\n[ \t]+", results["html_enter"]), "HTML Enter 未自动缩进"
             assert re.search(r"\n[ \t]+x", tabbed), "无补全时 Tab 未缩进"

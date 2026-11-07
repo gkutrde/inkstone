@@ -16,11 +16,12 @@ import { keymap } from "@codemirror/view";
 import { ghostCompletionPreview } from "./ghostCompletion";
 
 function snippet(label: string, template: string, detail = "代码片段"): Completion {
-  const preview = template
+  const normalized = template.replace(/\t/g, "  ");
+  const preview = normalized
     .replace(/\$\{\d+:([^{}]*)\}/g, "$1")
     .replace(/\$\{\d*\}/g, "");
   return Object.assign(
-    snippetCompletion(template, { label, detail, type: "snippet", boost: 20 }),
+    snippetCompletion(normalized, { label, detail, type: "snippet", boost: 20 }),
     { ghostText: preview }
   );
 }

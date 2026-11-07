@@ -22,6 +22,7 @@ export interface SourceEditorHandle {
   undo: () => boolean;
   redo: () => boolean;
   findNext: (query: string, backwards?: boolean) => boolean;
+  replaceCurrent: (query: string, replacement: string) => boolean;
   scrollToLine: (line: number) => void;
   focus: () => void;
   getSelection: () => string;
@@ -151,6 +152,21 @@ const SourceEditor = forwardRef<SourceEditorHandle, SourceEditorProps>(function 
         selection: { anchor: index, head: index + query.length },
         scrollIntoView: true
       });
+      return true;
+    },
+    replaceCurrent: (query: string, replacement: string) => {
+      const view = viewRef.current;
+      if (!view || !query) return false;
+      const needle = query.toLocaleLowerCase();
+      let { from, to } = view.state.selection.main;
+      const selected = view.state.sliceDoc(from, to).toLocaleLowerCase();
+      if (selected !== needle) {
+        const index = view.state.doc.toString().toLocaleLowerCase().indexOf(needle);
+        if (index < 0) return false;
+        from = index;
+        to = index + query.length;
+      }
+      view.dispatch({ changes: { from, to, insert: replacement } });
       return true;
     },
     scrollToLine: (line: number) => {
