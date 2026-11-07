@@ -44,7 +44,7 @@ function lightTheme(fontSize: number) {
         fontSize: fontSize + "px"
       },
       ".cm-scroller": {
-        fontFamily: "'Cascadia Code', 'JetBrains Mono', Consolas, monospace",
+        fontFamily: "var(--font-mono)",
         lineHeight: "1.75",
         overflow: "auto"
       },
@@ -76,7 +76,7 @@ function nightTheme(fontSize: number) {
       {
         "&": { height: "100%", backgroundColor: "transparent", fontSize: fontSize + "px" },
         ".cm-scroller": {
-          fontFamily: "'Cascadia Code', 'JetBrains Mono', Consolas, monospace",
+          fontFamily: "var(--font-mono)",
           lineHeight: "1.75"
         },
         ".cm-content": { padding: "48px 0 120px" },

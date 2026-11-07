@@ -8,9 +8,9 @@ function inTauri(): boolean {
 }
 
 const EFFECT_TINTS: Record<ThemeName, string> = {
-  paper: "#f7f3ea52",
-  sepia: "#efe2c752",
-  night: "#0c100e66"
+  paper: "#f5f5f75c",
+  sepia: "#f4efe75c",
+  night: "#11111388"
 };
 
 function setNativeGlassAttribute(enabled: boolean): void {

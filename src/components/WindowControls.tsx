@@ -1,6 +1,6 @@
 import { useEffect, useState } from "react";
 import { getCurrentWindow } from "@tauri-apps/api/window";
-import { Maximize2, Minimize2, Minus, X } from "lucide-react";
+import { Maximize2, Minimize2, Minus, X } from "./IosIcons";
 
 interface WindowControlsProps {
   onClose: () => void;

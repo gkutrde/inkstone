@@ -1,0 +1,47 @@
+{
+  "version": "0.1.3",
+  "upstream_commit": "9719221f67601e38da50eeed10ceebec7c3b285b",
+  "typescript": "passed",
+  "production_build": "passed",
+  "component_checks": 75,
+  "component_failures": 0,
+  "markdown_checks": 93,
+  "markdown_failures": 0,
+  "browser_suites": [
+    "comprehensive-review",
+    "replace-all-regression",
+    "remaining-features",
+    "editor-regressions"
+  ],
+  "browser_suites_passed": true,
+  "browser_interaction_tested": true,
+  "browser_ipc": "repository in-memory mock; not native Rust IPC",
+  "visual_scenarios": 6,
+  "visual_viewport": {
+    "width": 1440,
+    "height": 900
+  },
+  "native_backend_logic_unchanged": true,
+  "native_backend_tests": {
+    "passed": 16,
+    "failed": 0,
+    "execution": "real Windows test executable; Common Controls activation manifest supplied; test logic unchanged"
+  },
+  "native_tauri_tested": true,
+  "native_smoke_status": "passed",
+  "windows_installer_built": true,
+  "windows_target": "x86_64-pc-windows-gnu",
+  "executable_sha256": "e239934452685a16afd6a40942839e1fcdab6f14246300968172d1cb26f08c9f",
+  "installer_sha256": "7b044d8948d8ba9dcb9b73f24800946514cf90892f4b2b3891a1c9c8d723dc39",
+  "signing": "unsigned",
+  "clean_machine_tested": false,
+  "native_smoke_checks": 8,
+  "installed_startup_tested": true,
+  "installed_executable_sha256": "aa3c412ca506c3d514a4c3329f69f4fc1ff1cf083a586a25c7572eaa048eda08",
+  "nsis_payload_difference": "Only three bundle-marker bytes UNK to NSS; all other bytes identical",
+  "upgrade_data_preserved": {
+    "files": 477,
+    "all_hashes_preserved": true,
+    "baseline": "immediately before upgrade"
+  }
+}

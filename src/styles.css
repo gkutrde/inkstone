@@ -1496,38 +1496,62 @@ kbd,
   line-height: 1.92;
 }
 
+/* Share the first text baseline, including when a list starts with a heading.
+   Never position a marker with fixed heights or guessed top padding. */
 .editor-paper .rich-editor-root .milkdown .ProseMirror .list-item {
   display: flex;
-  align-items: flex-start;
+  align-items: baseline;
   gap: 2px;
   margin: 0.18em 0;
   padding-left: 0;
 }
 
-.editor-paper .rich-editor-root .milkdown .ProseMirror .list-item .label-wrapper {
+.editor-paper .rich-editor-root .milkdown .ProseMirror .list-item > .label-wrapper {
   flex: 0 0 20px;
   width: 20px;
-  padding-top: 0.62em;
+  height: auto;
+  padding: 0;
   display: flex;
+  align-items: baseline;
   justify-content: flex-end;
+  font: inherit;
   color: var(--ink-4);
 }
 
-.editor-paper .rich-editor-root .milkdown .ProseMirror .list-item .label-wrapper .milkdown-icon svg {
-  width: 13px;
-  height: 13px;
+/* Reset Crepe's 32px label height and 4px padding as well as the wrapper.
+   Intrinsic label width lets 10., 100., etc. grow into the left gutter. */
+.editor-paper .rich-editor-root .milkdown .ProseMirror .list-item > .label-wrapper > .label {
+  flex: none;
+  width: max-content;
+  height: auto;
+  padding: 0;
   display: block;
+  font: inherit;
+  white-space: nowrap;
+  text-align: right;
 }
 
-.editor-paper .rich-editor-root .milkdown .ProseMirror .list-item .children {
+/* Inline SVGs participate in the same line box as a textual list marker. */
+.editor-paper .rich-editor-root .milkdown .ProseMirror .list-item > .label-wrapper > .label svg {
+  width: 0.9em;
+  height: 0.9em;
+  display: inline-block;
+  vertical-align: -0.125em;
+}
+
+.editor-paper .rich-editor-root .milkdown .ProseMirror .list-item > .children {
   flex: 1;
   min-width: 0;
 }
 
-.editor-paper .rich-editor-root .milkdown .ProseMirror .list-item .children .content-dom > p,
-.editor-paper .rich-editor-root .milkdown .ProseMirror .list-item .children > p {
+.editor-paper .rich-editor-root .milkdown .ProseMirror .list-item > .children > .content-dom > p,
+.editor-paper .rich-editor-root .milkdown .ProseMirror .list-item > .children > p {
   margin: 0.1em 0;
   padding: 0;
+}
+
+.editor-paper .rich-editor-root .milkdown .ProseMirror .list-item > .children > .content-dom > :first-child {
+  margin-top: 0;
 }
 
 .editor-paper .rich-editor-root .milkdown .ProseMirror li::marker {

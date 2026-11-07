@@ -6,7 +6,7 @@ import {
   useState
 } from "react";
 import type { CSSProperties } from "react";
-import { ArrowDown, ArrowLeft, ArrowRight, ArrowUp } from "lucide-react";
+import { ArrowDown, ArrowLeft, ArrowRight, ArrowUp } from "./IosIcons";
 import { CrepeBuilder } from "@milkdown/crepe/builder";
 import { blockEdit } from "@milkdown/crepe/feature/block-edit";
 import { codeMirror } from "@milkdown/crepe/feature/code-mirror";
@@ -17,7 +17,8 @@ import { listItem } from "@milkdown/crepe/feature/list-item";
 import { placeholder } from "@milkdown/crepe/feature/placeholder";
 import { table } from "@milkdown/crepe/feature/table";
 import { toolbar } from "@milkdown/crepe/feature/toolbar";
-import { oneDark } from "@codemirror/theme-one-dark";
+import { codeTheme } from "../lib/codeTheme";
+import { keepEditorLanguageMenusVisible } from "../lib/editorFloatingMenus";
 import { languages } from "@codemirror/language-data";
 import { latex as lazyLatex } from "../lib/lazyLatex";
 import { editorViewCtx, remarkCtx, schemaCtx, serializerCtx } from "@milkdown/kit/core";
@@ -322,6 +323,7 @@ const RichEditor = forwardRef<RichEditorHandle, RichEditorProps>(function RichEd
     setError(null);
     let liveView: EditorView | null = null;
     let imageAltObserver: MutationObserver | null = null;
+    let releaseLanguageMenus: (() => void) | null = null;
     let tableFrame = 0;
     let tableHintTimer = 0;
     let prewarmTimer = 0;
@@ -435,7 +437,7 @@ const RichEditor = forwardRef<RichEditorHandle, RichEditorProps>(function RichEd
         mode: "doc"
       })
       .addFeature(toolbar)
-      .addFeature(codeMirror, { theme: oneDark, languages })
+      .addFeature(codeMirror, { theme: codeTheme, languages })
       .addFeature(table)
       .addFeature(lazyLatex);
     crepe.editor.config(configureDoubleTildeOnly);
@@ -553,6 +555,7 @@ const RichEditor = forwardRef<RichEditorHandle, RichEditorProps>(function RichEd
           if (imageChanged && liveView) syncImageAltText(liveView);
         });
         imageAltObserver.observe(root, { childList: true, subtree: true });
+        releaseLanguageMenus = keepEditorLanguageMenusVisible(root);
         if (liveView) syncImageAltText(liveView);
         setLoading(false);
         schedulePrewarm();
@@ -590,6 +593,8 @@ const RichEditor = forwardRef<RichEditorHandle, RichEditorProps>(function RichEd
       snapshotCacheRef.current = createMarkdownSnapshotCache();
       imageAltObserver?.disconnect();
       imageAltObserver = null;
+      releaseLanguageMenus?.();
+      releaseLanguageMenus = null;
       refreshTableBarRef.current = () => undefined;
       commitTableBar(null);
       setTableHint(null);

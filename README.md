@@ -1,10 +1,12 @@
 # Inkstone
 
+> **v0.1.3：iOS 风格界面的 Windows Markdown 工作台。** 不是 iPhone 应用。改版设计见 [改版说明](docs/IOS-REDESIGN.md)，本轮验证与限制见 [发行记录](docs/RELEASE-0.1.3.md)。Windows 安装图标继续沿用原有资源。
+
 一个用 Rust 与 Tauri 构建的本地优先 Markdown 写作工作台。界面与交互为原创实现，不复刻 Typora 的品牌、主题或专有资源。
 
 > A local-first Markdown writing studio for Windows, built with Tauri 2, React 19, Rust and native Acrylic glass.
 
-![Inkstone 截图](docs/screenshot.png)
+![Inkstone v0.1.3 生产前端截图（浏览器验收，IPC 使用测试替身）](docs/v0.1.3-editor-paper.png)
 
 [下载 Windows 安装包](https://github.com/gkutrde/inkstone/releases/latest) · [设计文档](DESIGN.md) · [MIT License](LICENSE.txt)
 
@@ -26,7 +28,7 @@
 - 引用式链接/图片及定义保留，图片缩放通过独立 HTML 比例属性持久化
 - YAML / TOML 前言富文本保护、文档目录相对图片、数字 alt 保留
 - HTML 导出经 DOMPurify 清洗并带禁止脚本 CSP
-- 纸白 / 旧纸 / 墨夜三种主题，字号与版心宽度可调
+- 浅色 / 暖色 / 深色三种主题，字号与版心宽度可调
 - 无边框一体化窗口、可拖动玻璃标题栏、原生 Acrylic/Mica 背景与 16px 原生圆角；透明模式可读性已单独调校
 - DOCX、HTML、Markdown 副本导出；通过系统打印窗口另存 PDF
 - DOCX 支持标题、列表、表格、代码、链接及常见本地图片嵌入
@@ -39,7 +41,7 @@
 - 原子写入与磁盘版本冲突保护，外部修改不会被静默覆盖
 - 未命名文稿保存为本机草稿，重新打开应用后可恢复
 
-## 运行时性能
+## 上游历史性能数据（v0.1.3 未重新测量）
 
 - 输入路径不再对整篇文档做 Markdown 序列化：编辑器只上报变更，快照按文档大小在停顿后生成；保存、模式切换、标签切换、导出、关闭、页面隐藏与 IME 组合结束前强制 flush。顶层块增量缓存进一步减少重复序列化，1 MB 对照全量 434.10ms → 增量 0.80ms，parity=0。
 - 真实 Tauri/WebView2（release）连续输入到下一帧 p95：31 KB 约 6 ms、251 KB 约 16 ms、1 MB 约 65 ms；连续输入期间无 >300 ms 长任务。

@@ -1,5 +1,5 @@
 from __future__ import annotations
-
+import argparse
 from datetime import datetime
 from hashlib import sha256
 from pathlib import Path
@@ -10,130 +10,112 @@ import subprocess
 import zipfile
 
 ROOT = Path(__file__).resolve().parent.parent
-VERSION = json.loads((ROOT / "package.json").read_text(encoding="utf-8"))["version"]
-DIST = (ROOT.parent / "dist").resolve()
-PACKAGE = (DIST / "Inkstone").resolve()
-RELEASE_EXE = (ROOT / "src-tauri" / "target" / "release" / "inkstone.exe").resolve()
-WINDOWS_ZIP = (DIST / f"Inkstone-{VERSION}-windows-x64.zip").resolve()
-SOURCE_ZIP = (DIST / f"Inkstone-{VERSION}-source.zip").resolve()
-SETUP = (DIST / f"Inkstone-Setup-{VERSION}-windows-x64.exe").resolve()
-SETUP_SOURCE = (ROOT / "src-tauri" / "target" / "release" / "bundle" / "nsis" / f"Inkstone_{VERSION}_x64-setup.exe").resolve()
-WEBVIEW2_LOADER = (ROOT / "src-tauri" / "target" / "release" / "WebView2Loader.dll").resolve()
-
-if DIST.name != "dist" or DIST.parent != ROOT.parent.resolve():
-    raise RuntimeError("Unexpected distribution path")
-if not RELEASE_EXE.is_file() or not PACKAGE.is_dir():
-    raise RuntimeError("Build the release executable and prepare dist/Inkstone first")
-for target in (WINDOWS_ZIP, SOURCE_ZIP):
-    if target.parent != DIST:
-        raise RuntimeError(f"Unexpected archive target: {target}")
-
-sample = ROOT / "sample-workspace"
-if (sample / "端到端新建.md").exists():
-    raise RuntimeError("E2E cleanup incomplete: test document still exists")
-welcome = sample / "欢迎使用 Inkstone.md"
-if welcome.exists():
-    content = welcome.read_text(encoding="utf-8")
-    markers = [
-        "端到端测试：Rust 文件命令工作正常。",
-        "自动保存回归：",
-        "手动保存回归：",
-        "外部编辑回归：",
-        "冲突回归：",
-    ]
-    if any(marker in content for marker in markers):
-        raise RuntimeError("E2E cleanup incomplete: test marker still exists")
+VERSION = json.loads((ROOT / 'package.json').read_text(encoding='utf-8'))['version']
 
 def digest(path: Path) -> str:
-    hasher = sha256()
-    with path.open("rb") as handle:
-        for block in iter(lambda: handle.read(1024 * 1024), b""):
-            hasher.update(block)
-    return hasher.hexdigest()
+    h = sha256()
+    with path.open('rb') as f:
+        for block in iter(lambda: f.read(1024 * 1024), b''):
+            h.update(block)
+    return h.hexdigest()
 
 def write_archive(target: Path, files: list[tuple[Path, str]]) -> None:
-    temporary = target.with_name(target.name + ".tmp")
-    with zipfile.ZipFile(temporary, "w", zipfile.ZIP_DEFLATED, compresslevel=9) as archive:
-        for source, arcname in sorted(files, key=lambda item: item[1]):
-            archive.write(source, arcname)
-    with zipfile.ZipFile(temporary) as archive:
-        damaged = archive.testzip()
-        if damaged:
-            raise RuntimeError(f"Archive verification failed: {damaged}")
+    temporary = target.with_name(target.name + '.tmp')
+    with zipfile.ZipFile(temporary, 'w', zipfile.ZIP_DEFLATED, compresslevel=9) as z:
+        for source, name in sorted(files, key=lambda x: x[1]):
+            z.write(source, name)
+    with zipfile.ZipFile(temporary) as z:
+        bad = z.testzip()
+        if bad:
+            raise RuntimeError('Archive verification failed: ' + bad)
     os.replace(temporary, target)
 
-shutil.copy2(RELEASE_EXE, PACKAGE / "Inkstone.exe")
-shutil.copy2(RELEASE_EXE, DIST / "Inkstone.exe")
-if WEBVIEW2_LOADER.is_file():
-    shutil.copy2(WEBVIEW2_LOADER, PACKAGE / "WebView2Loader.dll")
-    shutil.copy2(WEBVIEW2_LOADER, DIST / "WebView2Loader.dll")
-if not SETUP_SOURCE.is_file():
-    raise RuntimeError("Build the NSIS installer before packaging")
-shutil.copy2(SETUP_SOURCE, SETUP)
-shutil.copy2(ROOT / "inkstone-icon.svg", PACKAGE / "inkstone-icon.svg")
-shutil.copy2(ROOT / "BACKEND-REVIEW.md", PACKAGE / "BACKEND-REVIEW.md")
-shutil.copy2(ROOT / "DESIGN.md", PACKAGE / "DESIGN.md")
-shutil.copy2(ROOT / "THIRD-PARTY-NOTICES.md", PACKAGE / "THIRD-PARTY-NOTICES.md")
-shutil.copy2(ROOT / "TYPING-PERF-REPORT.md", PACKAGE / "TYPING-PERF-REPORT.md")
+def main() -> None:
+    parser = argparse.ArgumentParser(description='Package built Inkstone artifacts without historical test claims.')
+    parser.add_argument('--out-dir', type=Path, default=ROOT.parent / 'dist')
+    parser.add_argument('--build-dir', type=Path, default=ROOT / 'src-tauri/target/release')
+    parser.add_argument('--target', default='not recorded')
+    parser.add_argument('--verification', type=Path, help='Fresh verification JSON; never reuse an old BUILD-INFO.')
+    args = parser.parse_args()
+    dist = args.out_dir.resolve()
+    if dist == ROOT or dist == ROOT.parent or dist == Path(dist.anchor):
+        raise RuntimeError('Unsafe distribution directory')
+    build = args.build_dir.resolve()
+    exe = build / 'inkstone.exe'
+    loader = build / 'WebView2Loader.dll'
+    if not loader.is_file():
+        loader = ROOT / 'src-tauri/WebView2Loader.dll'
+    setup = build / 'bundle/nsis' / f'Inkstone_{VERSION}_x64-setup.exe'
+    for path in (exe, loader, setup):
+        if not path.is_file():
+            raise RuntimeError('Missing built artifact: ' + str(path))
+    verification = {'version': VERSION, 'summary': 'No verification record supplied.'}
+    if args.verification:
+        verification = json.loads(args.verification.read_text(encoding='utf-8'))
+        if verification.get('executable_sha256') != digest(exe):
+            raise RuntimeError('Verification executable hash does not match the built artifact')
+        if verification.get('version') != VERSION:
+            raise RuntimeError('Verification version does not match package version')
+        if not verification.get('checks') or not all(c.get('passed') is True for c in verification['checks']):
+            raise RuntimeError('Verification has missing or failing release checks')
+    tracked = subprocess.check_output(['git', 'ls-files', '-z'], cwd=ROOT).decode('utf-8').rstrip('\0').split('\0')
+    required = {'src/ios.css', 'src/components/IosIcons.tsx', 'src/lib/codeTheme.ts', 'src/lib/editorFloatingMenus.ts', 'pnpm-lock.yaml'}
+    if not required.issubset(tracked):
+        raise RuntimeError('Stage the intended new source files before creating the source ZIP')
+    source_files = []
+    for name in tracked:
+        relative = Path(name)
+        if relative.is_absolute() or '..' in relative.parts or name.startswith(('.git/', 'node_modules/', 'src-tauri/target/')):
+            raise RuntimeError('Unexpected tracked path: ' + name)
+        path = ROOT / relative
+        if not path.is_file() or path.is_symlink():
+            raise RuntimeError('Missing or symlinked tracked source: ' + name)
+        source_files.append((path, f'Inkstone-{VERSION}-Source/' + relative.as_posix()))
+    commit = subprocess.check_output(['git', 'rev-parse', 'HEAD'], cwd=ROOT).decode().strip()
+    dirty = bool(subprocess.check_output(['git', 'status', '--porcelain', '--untracked-files=no'], cwd=ROOT).strip())
+    dist.mkdir(parents=True, exist_ok=True)
+    package = dist / 'Inkstone'
+    package.mkdir(exist_ok=True)
+    files: list[tuple[Path, str]] = []
+    def ship(source: Path, name: str) -> None:
+        target = package / name
+        target.parent.mkdir(parents=True, exist_ok=True)
+        shutil.copy2(source, target)
+        files.append((target, name))
+    ship(exe, 'Inkstone.exe')
+    ship(loader, 'WebView2Loader.dll')
+    for name in ['LICENSE.txt', 'THIRD-PARTY-NOTICES.md', 'CHANGELOG.md', 'docs/IOS-REDESIGN.md', 'docs/RELEASE-0.1.3.md', 'docs/v0.1.2-editor-paper.png', 'docs/v0.1.3-editor-paper.png', 'docs/v0.1.3-welcome-paper.png', 'docs/v0.1.3-language-before.png', 'docs/v0.1.3-language-after.png']:
+        source = ROOT / name
+        if source.is_file():
+            ship(source, name)
+    readme = package / 'README.txt'
+    readme.write_text('Inkstone ' + VERSION + '\n\n运行 Inkstone.exe。需要 Windows x64 和 Microsoft Edge WebView2。\n安装版、便携版使用相同应用标识；升级不会主动清除草稿、文稿或设置。\n本发行物未做 Authenticode 签名，Windows SmartScreen 可能显示未知发布者。\n本轮验证范围与限制见 BUILD-INFO.json 和 docs/RELEASE-0.1.3.md。\n', encoding='utf-8')
+    files.append((readme, readme.name))
+    info = {'Name': 'Inkstone', 'Version': VERSION, 'Platform': 'Windows x86_64',
+            'Executable': 'Inkstone.exe', 'Bytes': exe.stat().st_size, 'SHA256': digest(exe),
+            'SourceCommit': commit, 'TrackedWorkingTreeDirty': dirty, 'BuildTarget': args.target,
+            'BuildDate': datetime.fromtimestamp(exe.stat().st_mtime).astimezone().isoformat(timespec='seconds'),
+            'PackagedAt': datetime.now().astimezone().isoformat(timespec='seconds'),
+            'Verification': verification}
+    info_path = package / 'BUILD-INFO.json'
+    info_path.write_text(json.dumps(info, ensure_ascii=False, indent=2) + '\n', encoding='utf-8')
+    files.append((info_path, info_path.name))
+    sums = package / 'SHA256SUMS.txt'
+    sums.write_text(''.join(f'{digest(p)}  {name}\n' for p, name in sorted(files, key=lambda x: x[1])), encoding='utf-8')
+    files.append((sums, sums.name))
+    windows_zip = dist / f'Inkstone-{VERSION}-windows-x64.zip'
+    source_zip = dist / f'Inkstone-{VERSION}-source.zip'
+    installer = dist / f'Inkstone-Setup-{VERSION}-windows-x64.exe'
+    shutil.copy2(setup, installer)
+    shutil.copy2(exe, dist / 'Inkstone.exe')
+    shutil.copy2(loader, dist / 'WebView2Loader.dll')
+    write_archive(windows_zip, [(p, 'Inkstone/' + name) for p, name in files])
+    write_archive(source_zip, source_files)
+    assets = [installer, windows_zip, source_zip]
+    (dist / 'SHA256SUMS.txt').write_text(''.join(f'{digest(p)}  {p.name}\n' for p in assets), encoding='utf-8')
+    print(json.dumps({'version': VERSION, 'sourceCommit': commit, 'dirty': dirty,
+                      'assets': [{'file': p.name, 'bytes': p.stat().st_size, 'sha256': digest(p)} for p in assets],
+                      'portableFiles': len(files), 'sourceFiles': len(source_files)}, ensure_ascii=False, indent=2))
 
-info_path = PACKAGE / "BUILD-INFO.json"
-info = json.loads(info_path.read_text(encoding="utf-8-sig"))
-info.update({
-    "Version": VERSION,
-    "Bytes": RELEASE_EXE.stat().st_size,
-    "SHA256": digest(RELEASE_EXE),
-    "Tests": "16 Rust backend tests passed; typing smoothness E2E 23/23, IME 9/9, export freshness 4/4; R2 UX acceptance passed (table shortcut, four-way controls, header guard, undo, Tab row, Markdown roundtrip, transparency fallback, one-line code 64.55px); real WebView2 release regression passed with code block 65.03px and no application console errors; native Windows Acrylic verified on Windows 10 19045 (nativeGlass transparency, theme change, disable/clear fallback); frameless integrated chrome verified (custom minimize/maximize controls, native titlebar removed, real-mouse drag, safe close guard); Win32 SetWindowRgn rounded corners verified (startup complex region, square while maximized, rounded on restore); transparency readability pass verified (sidebar 76% / chrome 68–82% / popover 90%, native tint 32–40%); NSIS per-user install/upgrade/uninstall verified; signing pipeline test-verified (public signing pending CA certificate); Markdown/Typora input regression 93/93 on installed x86_64-pc-windows-gnu release (single tilde literal, double tilde strikethrough, links/images/autolinks, unsafe URL guard, source roundtrip); installed NSIS update verified",
-    "BuildTarget": "x86_64-pc-windows-gnu",
-    "StaticCRT": True,
-    "BuildDate": datetime.now().astimezone().isoformat(timespec="seconds"),
-})
-info_path.write_text(json.dumps(info, ensure_ascii=False, indent=2) + "\n", encoding="utf-8")
-
-# Hashes for files shipped inside the portable folder. This file deliberately
-# excludes itself, so it remains verifiable after the folder is zipped.
-package_sum_path = PACKAGE / "SHA256SUMS.txt"
-package_sum_lines = []
-for path in sorted((p for p in PACKAGE.rglob("*") if p.is_file() and p != package_sum_path), key=lambda p: str(p.relative_to(PACKAGE)).lower()):
-    relative = str(path.relative_to(PACKAGE)).replace("\\", "/")
-    package_sum_lines.append(f"{digest(path)}  {relative}")
-package_sum_path.write_text("\n".join(package_sum_lines) + "\n", encoding="utf-8")
-
-package_files = [
-    (path, str(Path("Inkstone") / path.relative_to(PACKAGE)).replace("\\", "/"))
-    for path in PACKAGE.rglob("*") if path.is_file()
-]
-write_archive(WINDOWS_ZIP, package_files)
-
-tracked = subprocess.run(
-    ["git", "ls-files", "-z"],
-    cwd=ROOT,
-    check=True,
-    stdout=subprocess.PIPE,
-).stdout
-tracked_paths = [raw.decode("utf-8") for raw in tracked.split(b"\0") if raw]
-source_files = [
-    (
-        ROOT / relative,
-        str(Path(f"Inkstone-{VERSION}-Source") / relative).replace("\\", "/"),
-    )
-    for relative in tracked_paths
-    if (ROOT / relative).is_file()
-]
-write_archive(SOURCE_ZIP, source_files)
-
-release_sum_lines = []
-release_assets = [DIST / "Inkstone.exe"]
-if (DIST / "WebView2Loader.dll").is_file():
-    release_assets.append(DIST / "WebView2Loader.dll")
-release_assets.extend((SETUP, WINDOWS_ZIP, SOURCE_ZIP))
-for path in release_assets:
-    release_sum_lines.append(f"{digest(path)}  {path.name}")
-(DIST / "SHA256SUMS.txt").write_text("\n".join(release_sum_lines) + "\n", encoding="utf-8")
-
-result = {
-    "installer": {"path": str(SETUP), "bytes": SETUP.stat().st_size, "sha256": digest(SETUP)},
-    "executable": {"path": str(DIST / "Inkstone.exe"), "bytes": RELEASE_EXE.stat().st_size, "sha256": digest(RELEASE_EXE)},
-    "windowsZip": {"path": str(WINDOWS_ZIP), "bytes": WINDOWS_ZIP.stat().st_size, "files": len(package_files)},
-    "sourceZip": {"path": str(SOURCE_ZIP), "bytes": SOURCE_ZIP.stat().st_size, "files": len(source_files)},
-}
-print(json.dumps(result, ensure_ascii=False, indent=2))
+if __name__ == '__main__':
+    main()

@@ -1,4 +1,4 @@
-import { ListTree, X } from "lucide-react";
+import { ListTree, X } from "./IosIcons";
 import type { OutlineItem } from "../types";
 
 interface OutlineProps {

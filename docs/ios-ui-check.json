@@ -1,0 +1,310 @@
+{
+  "passed": 75,
+  "failed": 0,
+  "checks": [
+    {
+      "name": "welcome heading and actionable starter",
+      "passed": true
+    },
+    {
+      "name": "empty document disables save and export",
+      "passed": true
+    },
+    {
+      "name": "real callbacks connect new sidebar actions and starter",
+      "passed": true
+    },
+    {
+      "name": "theme and editor controls expose selected states",
+      "passed": true
+    },
+    {
+      "name": "symbol AlertCircle",
+      "passed": true
+    },
+    {
+      "name": "symbol ArrowDown",
+      "passed": true
+    },
+    {
+      "name": "symbol ArrowLeft",
+      "passed": true
+    },
+    {
+      "name": "symbol ArrowRight",
+      "passed": true
+    },
+    {
+      "name": "symbol ArrowUp",
+      "passed": true
+    },
+    {
+      "name": "symbol ArrowUpRight",
+      "passed": true
+    },
+    {
+      "name": "symbol BookOpen",
+      "passed": true
+    },
+    {
+      "name": "symbol CheckCircle2",
+      "passed": true
+    },
+    {
+      "name": "symbol ChevronDown",
+      "passed": true
+    },
+    {
+      "name": "symbol ChevronRight",
+      "passed": true
+    },
+    {
+      "name": "symbol CircleCheck",
+      "passed": true
+    },
+    {
+      "name": "symbol Clock3",
+      "passed": true
+    },
+    {
+      "name": "symbol Command",
+      "passed": true
+    },
+    {
+      "name": "symbol CornerDownLeft",
+      "passed": true
+    },
+    {
+      "name": "symbol Download",
+      "passed": true
+    },
+    {
+      "name": "symbol ExternalLink",
+      "passed": true
+    },
+    {
+      "name": "symbol FileCode2",
+      "passed": true
+    },
+    {
+      "name": "symbol FilePlus2",
+      "passed": true
+    },
+    {
+      "name": "symbol FileText",
+      "passed": true
+    },
+    {
+      "name": "symbol FileType2",
+      "passed": true
+    },
+    {
+      "name": "symbol Folder",
+      "passed": true
+    },
+    {
+      "name": "symbol FolderOpen",
+      "passed": true
+    },
+    {
+      "name": "symbol FolderPlus",
+      "passed": true
+    },
+    {
+      "name": "symbol Grid2X2",
+      "passed": true
+    },
+    {
+      "name": "symbol HardDrive",
+      "passed": true
+    },
+    {
+      "name": "symbol Info",
+      "passed": true
+    },
+    {
+      "name": "symbol Keyboard",
+      "passed": true
+    },
+    {
+      "name": "symbol ListTree",
+      "passed": true
+    },
+    {
+      "name": "symbol LockKeyhole",
+      "passed": true
+    },
+    {
+      "name": "symbol Maximize2",
+      "passed": true
+    },
+    {
+      "name": "symbol Minimize2",
+      "passed": true
+    },
+    {
+      "name": "symbol Minus",
+      "passed": true
+    },
+    {
+      "name": "symbol Moon",
+      "passed": true
+    },
+    {
+      "name": "symbol MoreHorizontal",
+      "passed": true
+    },
+    {
+      "name": "symbol NotebookPen",
+      "passed": true
+    },
+    {
+      "name": "symbol PanelLeft",
+      "passed": true
+    },
+    {
+      "name": "symbol PanelLeftClose",
+      "passed": true
+    },
+    {
+      "name": "symbol PanelRight",
+      "passed": true
+    },
+    {
+      "name": "symbol Pencil",
+      "passed": true
+    },
+    {
+      "name": "symbol PenLine",
+      "passed": true
+    },
+    {
+      "name": "symbol Plus",
+      "passed": true
+    },
+    {
+      "name": "symbol Printer",
+      "passed": true
+    },
+    {
+      "name": "symbol Redo2",
+      "passed": true
+    },
+    {
+      "name": "symbol RefreshCw",
+      "passed": true
+    },
+    {
+      "name": "symbol Replace",
+      "passed": true
+    },
+    {
+      "name": "symbol Save",
+      "passed": true
+    },
+    {
+      "name": "symbol Search",
+      "passed": true
+    },
+    {
+      "name": "symbol Settings2",
+      "passed": true
+    },
+    {
+      "name": "symbol Share",
+      "passed": true
+    },
+    {
+      "name": "symbol ShieldCheck",
+      "passed": true
+    },
+    {
+      "name": "symbol Sparkles",
+      "passed": true
+    },
+    {
+      "name": "symbol Sun",
+      "passed": true
+    },
+    {
+      "name": "symbol Trash2",
+      "passed": true
+    },
+    {
+      "name": "symbol Undo2",
+      "passed": true
+    },
+    {
+      "name": "symbol X",
+      "passed": true
+    },
+    {
+      "name": "icon string sizes and accessibility overrides",
+      "passed": true
+    },
+    {
+      "name": "render theme paper",
+      "passed": true
+    },
+    {
+      "name": "render theme sepia",
+      "passed": true
+    },
+    {
+      "name": "render theme night",
+      "passed": true
+    },
+    {
+      "name": "narrow initial state retains welcome without sidebar",
+      "passed": true
+    },
+    {
+      "name": "persisted source draft restores tab and editor shell",
+      "passed": true
+    },
+    {
+      "name": "workspace file tree and quick actions render",
+      "passed": true
+    },
+    {
+      "name": "outline preserves structure and stats",
+      "passed": true
+    },
+    {
+      "name": "command palette renders with accessible dialog",
+      "passed": true
+    },
+    {
+      "name": "prompt renders form controls",
+      "passed": true
+    },
+    {
+      "name": "all themes, responsive and accessibility CSS contracts",
+      "passed": true
+    },
+    {
+      "name": "app artwork is local SVG without executable or remote assets",
+      "passed": true
+    },
+    {
+      "name": "list markers share the first text baseline without fixed offsets",
+      "passed": true
+    },
+    {
+      "name": "list icons and heading content use the first line box",
+      "passed": true
+    },
+    {
+      "name": "markdown outline excludes code fences",
+      "passed": true
+    },
+    {
+      "name": "frontmatter and draft storage remain lossless",
+      "passed": true
+    }
+  ],
+  "limitations": [
+    "No browser layout or interaction verification: Windows process-pipe policy blocks Chromium.",
+    "Native Tauri filesystem, dialogs and acrylic were not executed."
+  ]
+}

@@ -32,9 +32,14 @@ import {
   Settings2,
   ShieldCheck,
   Sun,
+  Sparkles,
+  LockKeyhole,
+  PenLine,
+  Share,
+  ArrowUpRight,
   Undo2,
   X
-} from "lucide-react";
+} from "./components/IosIcons";
 import Sidebar from "./components/Sidebar";
 import Outline from "./components/Outline";
 import FindBar from "./components/FindBar";
@@ -183,9 +188,9 @@ function escapeRegExp(value: string): string {
 }
 
 function themeName(theme: ThemeName): string {
-  if (theme === "night") return "墨夜";
-  if (theme === "sepia") return "旧纸";
-  return "纸白";
+  if (theme === "night") return "深色";
+  if (theme === "sepia") return "暖色";
+  return "浅色";
 }
 
 function themeIcon(theme: ThemeName) {
@@ -504,19 +509,46 @@ export default function App() {
 
   openPathHandlerRef.current = openDocument;
 
-  const newDocument = () => {
+  const createDraft = (name: string, content: string) => {
     focusOnReadyRef.current = true;
     const tab: Tab = {
       id: makeId(),
       path: null,
-      name: "未命名",
-      content: "",
+      name,
+      content,
       savedContent: "\u0000",
       mode: "rich"
     };
     setTabs((current) => [...current, tab]);
     activateTab(tab.id);
   };
+
+  const newDocument = () => createDraft("未命名", "");
+
+  const openStarterDocument = () => createDraft("写给今天的自己", [
+    "# 写给今天的自己",
+    "",
+    "把平凡的日子，写成自己的故事。",
+    "",
+    "> 不必等到一切准备好。现在，就是落笔的好时候。",
+    "",
+    "## 留住一个小小的瞬间",
+    "",
+    "清晨的第一杯咖啡，窗边落下的光，或者一个突然冒出来的想法。那些微小的、真实的片刻，都值得被好好记录。",
+    "",
+    "## 今天，想做的三件事",
+    "",
+    "- [x] 为自己留一段安静的时间",
+    "- [ ] 记下一个让自己微笑的瞬间",
+    "- [ ] 让一个新想法慢慢生长",
+    "",
+    "## 让写作简单一点",
+    "",
+    "用 **粗体** 标记重要的事，用 *斜体* 留下一点心情。输入 `#` 和空格创建标题，也可以在上方切换到 Markdown 源码。",
+    "",
+    "文字留在本机，思绪自由生长。接下来的故事，交给你。",
+    ""
+  ].join("\n"));
 
   const markAutoSaving = (id: string, saving: boolean) => {
     setAutoSavingIds((current) => {
@@ -1089,6 +1121,7 @@ export default function App() {
   };
 
   useEffect(() => {
+    if (!("__TAURI_INTERNALS__" in window)) return;
     // Files opened from Explorer (first launch or "open with") arrive here.
     let disposed = false;
     const handleLaunch = (payload: { paths?: string[]; errors?: string[] } | null | undefined) => {
@@ -1109,6 +1142,7 @@ export default function App() {
   }, []);
 
   useEffect(() => {
+    if (!("__TAURI_INTERNALS__" in window)) return;
     const saved = localStorage.getItem(WORKSPACE_KEY);
     if (!saved) return;
     // Keep the key on failure: the welcome page should offer a re-pick instead
@@ -1677,7 +1711,7 @@ export default function App() {
           <img className="brand-mark" src={brandMark} alt="" aria-hidden="true" draggable={false} />
           <div className="brand-copy">
             <strong>Inkstone</strong>
-            <span>写作工作台</span>
+            <span>让灵感，自在生长</span>
           </div>
         </div>
         <div className="header-rule" />
@@ -1713,7 +1747,7 @@ export default function App() {
           </button>
           <div className="popover-anchor">
             <button
-              className="icon-button quiet popover-trigger"
+              className="icon-button quiet popover-trigger share-button"
               title="导出"
               aria-expanded={exportOpen}
               aria-haspopup="menu"
@@ -1724,7 +1758,7 @@ export default function App() {
               }}
               disabled={!activeTab || exporting}
             >
-              <Download size={17} />
+              <Share size={17} /><span>导出</span>
             </button>
             {exportOpen && (
               <div className="popover export-menu" id="export-menu" role="menu" aria-label="导出当前文稿">
@@ -1779,6 +1813,7 @@ export default function App() {
                     <button
                       key={theme}
                       className={"theme-option" + (settings.theme === theme ? " is-active" : "")}
+                      aria-pressed={settings.theme === theme}
                       onClick={() => patchSettings({ theme })}
                     >
                       <span className={"theme-swatch swatch-" + theme} />
@@ -1817,6 +1852,7 @@ export default function App() {
                   </span>
                   <input
                     type="checkbox"
+                    role="switch"
                     checked={settings.autoSave}
                     onChange={(event) => patchSettings({ autoSave: event.target.checked })}
                   />
@@ -1824,10 +1860,11 @@ export default function App() {
                 <label className="settings-toggle">
                   <span className="toggle-copy">
                     <strong>减少透明效果</strong>
-                    <small>关闭桌面 Acrylic，工具层改为实心纸面</small>
+                    <small>关闭磨砂玻璃，使用实心背景</small>
                   </span>
                   <input
                     type="checkbox"
+                    role="switch"
                     checked={settings.reduceTransparency}
                     onChange={(event) => patchSettings({ reduceTransparency: event.target.checked })}
                   />
@@ -1856,6 +1893,8 @@ export default function App() {
             tree={tree}
             activePath={activeTab?.path ?? null}
             onOpenFolder={() => void openFolderDialog()}
+            onNewDocument={newDocument}
+            onPickFile={() => void openFileDialog()}
             onOpenFile={(path) => void openDocument(path)}
             onRefresh={() => void refreshTree()}
             onCreateFile={askNewFile}
@@ -1928,6 +1967,7 @@ export default function App() {
                 <div className="mode-switch" role="group" aria-label="编辑模式">
                   <button
                     className={activeTab.mode === "rich" ? "is-active" : ""}
+                    aria-pressed={activeTab.mode === "rich"}
                     onClick={() => setMode("rich")}
                     title="所见即所得编辑"
                   >
@@ -1935,10 +1975,11 @@ export default function App() {
                   </button>
                   <button
                     className={activeTab.mode === "source" ? "is-active" : ""}
+                    aria-pressed={activeTab.mode === "source"}
                     onClick={() => setMode("source")}
                     title="Markdown 源码（Ctrl+E / Ctrl+/）"
                   >
-                    <span className="source-glyph">M↓</span> 源码
+                    <FileCode2 size={14} /> 源码
                   </button>
                 </div>
                 {workspace && workspaceReadOnly && (
@@ -2065,25 +2106,28 @@ export default function App() {
             <div className="welcome">
               <div className="welcome-copy">
                 <img className="welcome-mark" src={brandMark} alt="" aria-hidden="true" draggable={false} />
-                <p className="welcome-line">本地 Markdown 工作台</p>
-                <h1>让文字<br />先落下来。</h1>
+                <p className="welcome-line"><Sparkles size={12} /> 灵感，由此开始</p>
+                <h1>给想法，<br /><span>一个安静的地方。</span></h1>
                 <p className="welcome-intro">
-                  Inkstone 是一个本地优先的 Markdown 写作空间。文件留在你的电脑里，
-                  专注留给正在发生的想法。
+                  记录日常，整理思绪，让灵感慢慢生长。<br />
+                  一个轻盈、专注，只属于你的 Markdown 写作空间。
                 </p>
                 <div className="welcome-actions">
                   <button className="primary-button" onClick={newDocument}>
-                    <FilePlus2 size={17} /> 新建文稿
+                    <PenLine size={17} /> 新建文稿
                   </button>
                   <button className="text-button" onClick={() => void openFileDialog()}>
-                    <FileText size={16} /> 打开文件
+                    <FolderOpen size={16} /> 打开文件
                   </button>
-                  <button className="text-button" onClick={() => void openFolderDialog()}>
-                    <FolderOpen size={16} /> 打开文件夹
-                  </button>
-                  <button className="text-button" onClick={() => void askNewWorkspace()}>
-                    <FolderPlus size={16} /> 新建工作区
-                  </button>
+                </div>
+                <div className="welcome-secondary">
+                  <button onClick={() => void openFolderDialog()}><FolderOpen size={13} /> 打开文件夹</button>
+                  <button onClick={() => void askNewWorkspace()}><FolderPlus size={13} /> 新建工作区</button>
+                </div>
+                <div className="welcome-features">
+                  <span><LockKeyhole size={13} /> 本地优先</span>
+                  <span><ShieldCheck size={13} /> 自动保存</span>
+                  <span><BookOpen size={13} /> 自在书写</span>
                 </div>
                 {recentWorkspaces.length > 0 && (
                   <div className="welcome-workspaces">
@@ -2104,6 +2148,20 @@ export default function App() {
                 )}
               </div>
               <div className="welcome-aside">
+                <div className="starter-preview">
+                  <div className="starter-preview-head">
+                    <span className="starter-symbol"><PenLine size={19} /></span>
+                    <div><strong>写给今天的自己</strong><small>A LITTLE SPACE FOR YOUR MIND</small></div>
+                    <FileText size={15} />
+                  </div>
+                  <h2>记录每一个<br />值得留下的瞬间。</h2>
+                  <p>不必想好开头，也不必急着完成。<br />从一个小小的想法，开始就好。</p>
+                  <ul className="starter-checklist">
+                    <li><CheckCircle2 size={15} /> 留一点时间，给自己</li>
+                    <li><span className="empty-check" /> 让一个新想法慢慢生长</li>
+                  </ul>
+                  <button className="starter-cta" onClick={openStarterDocument}>打开示例文稿 <ArrowUpRight size={16} /></button>
+                </div>
                 <div className="welcome-aside-head">
                   <span>最近文稿</span>
                   <span className="recent-count">{recent.length}</span>

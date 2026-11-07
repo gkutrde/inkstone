@@ -15,8 +15,9 @@ import {
   Pencil,
   RefreshCw,
   Search,
+  ShieldCheck,
   Trash2
-} from "lucide-react";
+} from "./IosIcons";
 import type { FileNode } from "../types";
 import { searchWorkspace } from "../lib/api";
 import { baseName, normalizeSlashes } from "../lib/path";
@@ -27,6 +28,8 @@ interface SidebarProps {
   tree: FileNode[];
   activePath: string | null;
   onOpenFolder: () => void;
+  onNewDocument: () => void;
+  onPickFile: () => void;
   onOpenFile: (path: string) => void;
   onRefresh: () => void;
   onCreateFile: (parent: string) => void;
@@ -136,6 +139,8 @@ export default function Sidebar({
   tree,
   activePath,
   onOpenFolder,
+  onNewDocument,
+  onPickFile,
   onOpenFile,
   onRefresh,
   onCreateFile,
@@ -328,12 +333,22 @@ export default function Sidebar({
     <aside className="sidebar">
       <div className="sidebar-heading">
         <div>
-          <span className="sidebar-kicker">写作空间</span>
-          <strong title={workspace ?? undefined}>{workspaceName}</strong>
+          <span className="sidebar-kicker">你的写作空间</span>
+          <strong>我的文稿</strong>
         </div>
         <button className="icon-button quiet" title="收起侧栏" onClick={onClose}>
-          <PanelLeftClose size={16} />
+          <PanelLeftClose size={18} />
         </button>
+      </div>
+
+      <div className="sidebar-quick-actions">
+        <button className="sidebar-compose" onClick={onNewDocument}><Pencil size={17} /> 新建文稿</button>
+        <button className="sidebar-open" onClick={onPickFile}><FileText size={16} /> 打开文件 <kbd>Ctrl O</kbd></button>
+      </div>
+      <div className="workspace-label">
+        <Folder size={21} />
+        <div><strong title={workspace ?? undefined}>{workspace ? workspaceName : "本地工作区"}</strong><small>{workspace ? "文件与灵感，都在这里" : "连接一个文件夹，开始整理"}</small></div>
+        <button className="icon-button quiet small" title="选择工作区" onClick={onOpenFolder}><ChevronRight size={14} /></button>
       </div>
 
       {workspace ? (
@@ -422,11 +437,16 @@ export default function Sidebar({
       ) : (
         <div className="sidebar-empty">
           <div className="sidebar-empty-mark"><FolderOpen size={30} strokeWidth={1.2} /></div>
-          <h2>先选一个写作空间</h2>
-          <p>打开包含 Markdown 的文件夹，文档树会自动出现在这里。</p>
+          <h2>把灵感整理在一起</h2>
+          <p>连接本地文件夹，让每一篇文稿都有自己的位置。</p>
           <button className="primary-button" onClick={onOpenFolder}>打开文件夹</button>
         </div>
       )}
+
+      <div className="sidebar-storage">
+        <ShieldCheck size={19} />
+        <div><strong>只属于你的文字</strong><small>文件保存在本机，无需上传</small></div>
+      </div>
 
       <div className="sidebar-footer">
         <button className="open-folder-link" onClick={onOpenFolder}>

@@ -1,5 +1,5 @@
 import { useEffect, useRef } from "react";
-import { ArrowDown, ArrowUp, Replace, X } from "lucide-react";
+import { ArrowDown, ArrowUp, Replace, X } from "./IosIcons";
 
 interface FindBarProps {
   query: string;

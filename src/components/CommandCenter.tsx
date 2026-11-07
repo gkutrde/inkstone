@@ -1,5 +1,5 @@
 import { useEffect, useMemo, useRef, useState, type ReactNode } from "react";
-import { Clock3, Command as CommandIcon, CornerDownLeft, Search } from "lucide-react";
+import { Clock3, Command as CommandIcon, CornerDownLeft, Search } from "./IosIcons";
 import { useModalA11y } from "../lib/useModalA11y";
 
 export interface CommandAction {

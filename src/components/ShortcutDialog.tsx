@@ -1,5 +1,5 @@
 import { useRef } from "react";
-import { X } from "lucide-react";
+import { X } from "./IosIcons";
 import { useModalA11y } from "../lib/useModalA11y";
 
 const groups = [
