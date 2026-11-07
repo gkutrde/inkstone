@@ -5,6 +5,9 @@ from hashlib import sha256
 from pathlib import Path
 import json
 import os
+import posixpath
+import re
+from urllib.parse import quote
 import shutil
 import subprocess
 import zipfile
@@ -91,6 +94,27 @@ def main() -> None:
     readme = package / 'README.txt'
     readme.write_text('Inkstone ' + VERSION + '\n\n运行 Inkstone.exe。需要 Windows x64 和 Microsoft Edge WebView2。\n安装版、便携版使用相同应用标识；升级不会主动清除草稿、文稿或设置。\n本发行物未做 Authenticode 签名，Windows SmartScreen 可能显示未知发布者。\n本轮验证范围与限制见 BUILD-INFO.json 和 docs/RELEASE-0.1.3.md。\n', encoding='utf-8')
     files.append((readme, readme.name))
+    # Developer references belong to the versioned source tree, not the portable runtime.
+    shipped = {name for _, name in files}
+    for target, name in files:
+        if target.suffix != '.md':
+            continue
+        def reference(match):
+            link = match.group(1)
+            if '://' in link or link.startswith(('mailto:', '#')):
+                return match.group(0)
+            path, separator, fragment = link.strip('<>').partition('#')
+            resolved = posixpath.normpath(posixpath.join(posixpath.dirname(name), path))
+            if resolved in shipped:
+                return match.group(0)
+            if resolved not in tracked:
+                raise RuntimeError('Unresolved portable documentation reference: ' + resolved)
+            url = f'https://github.com/gkutrde/inkstone/blob/v{VERSION}/' + quote(resolved, safe='/')
+            if separator:
+                url += '#' + fragment
+            return match.group(0).replace(link, url, 1)
+        text = target.read_text(encoding='utf-8')
+        target.write_text(re.sub(r'!?\[[^\]]*\]\(([^)]+)\)', reference, text), encoding='utf-8')
     info = {'Name': 'Inkstone', 'Version': VERSION, 'Platform': 'Windows x86_64',
             'Executable': 'Inkstone.exe', 'Bytes': exe.stat().st_size, 'SHA256': digest(exe),
             'SourceCommit': commit, 'TrackedWorkingTreeDirty': dirty, 'BuildTarget': args.target,
