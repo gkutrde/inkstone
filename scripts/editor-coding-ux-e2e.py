@@ -79,6 +79,18 @@ DOCS = {
 
 ```
 """,
+    "cpp-sample.md": """# C++ 示例换行
+
+```cpp
+
+```
+""",
+    "source-cpp-sample.md": """# C++ 源码示例换行
+
+```cpp
+
+```
+""",
     "cpp-space.md": """# C++ 大括号空格
 
 ```cpp
@@ -167,7 +179,7 @@ def table_case(page, out: Path, verify: bool) -> None:
     assert page.locator(".milkdown-table-block tr").count() == 3, "表格模式往返后行数变化"
 
 
-def enter_and_complete(page, out: Path, source: bool = False) -> None:
+def enter_without_completions(page, out: Path, source: bool = False) -> None:
     content = page.locator(".source-editor-shell .cm-content" if source else ".milkdown-code-block .cm-content")
     content.click()
     if source:
@@ -197,6 +209,7 @@ def enter_and_complete(page, out: Path, source: bool = False) -> None:
     results["source_javascript" if source else "rich_javascript"] = {
         "afterEnter": after_enter,
         "completionVisible": visible,
+        "ghostVisible": page.locator(".cm-ghost-completion").count(),
         "items": items[:12],
         "tooltipText": tooltip_text,
         "afterTab": after_tab,
@@ -262,14 +275,12 @@ def ghost_case(page, doc: str, key: str, out: Path, source: bool, verify: bool) 
         "ghostAfterAccept": page.locator(".cm-ghost-completion").count(),
     }
     if verify:
-        assert early_count == 0, key + " 在 500ms 前显示了预览"
-        assert visible and "main()" in text and "return 0;" in text, key + " 未显示完整 C++ 多行预览"
-        assert opacity is not None and opacity < 0.7, key + " 预览颜色不够淡"
-        assert cpp_body(before_accept).strip() == "int", key + " 预览被提前写入文档"
-        accepted = cpp_body(after_accept)
-        assert "int main()" in accepted and "return 0;" in accepted, key + " Tab 未接受 C++ 模板"
-        assert "${" not in accepted, key + " 模板残留占位符"
-        assert results[key]["ghostAfterAccept"] == 0, key + " 接受后预览未消失"
+        assert early_count == 0, key + " 在输入早期显示了幽灵预览"
+        assert not visible and text == "" and opacity is None, key + " 仍显示幽灵预览"
+        assert cpp_body(before_accept).strip() == "int", key + " 输入被预览污染"
+        assert cpp_body(after_accept) == cpp_body(before_accept), key + " Tab 仍插入代码片段"
+        assert results[key]["ghostAfterAccept"] == 0, key + " 幽灵预览未保持关闭"
+        assert page.locator(".cm-tooltip-autocomplete").count() == 0, key + " 仍显示补全弹窗"
 
 
 def ghost_escape_case(page, out: Path, verify: bool) -> None:
@@ -283,7 +294,26 @@ def ghost_escape_case(page, out: Path, verify: bool) -> None:
     remaining = page.locator(".cm-ghost-completion").count()
     results["cpp_escape"] = {"before": visible, "after": remaining}
     if verify:
-        assert visible and remaining == 0, "Escape 未关闭幽灵预览"
+        assert not visible and remaining == 0, "幽灵预览在 Escape 场景中仍然出现"
+
+
+def cpp_sample_case(page, doc: str, key: str, out: Path, source: bool, verify: bool) -> None:
+    open_doc(page, doc)
+    if source:
+        switch_mode(page, True)
+    focus_code(page, source)
+    page.keyboard.type("else if (money == 100) {", delay=30)
+    page.keyboard.press("Enter")
+    page.wait_for_timeout(250)
+    body = cpp_body(flush(page))
+    completion_count = page.locator(".cm-tooltip-autocomplete").count()
+    ghost_count = page.locator(".cm-ghost-completion").count()
+    page.screenshot(path=str(out / (key + ".png")), full_page=True)
+    results[key] = {"body": body, "completions": completion_count, "ghosts": ghost_count}
+    if verify:
+        expected = "else if (money == 100)\n{\n    \n}\n"
+        assert body == expected, key + " 未生成 Allman 四空格结构: " + repr(body)
+        assert completion_count == 0 and ghost_count == 0, key + " 仍显示补全或幽灵预览"
 
 
 def brace_case(page, doc: str, key: str, out: Path, source: bool, space: bool, verify: bool) -> None:
@@ -303,7 +333,7 @@ def brace_case(page, doc: str, key: str, out: Path, source: bool, space: bool, v
     elif verify:
         lines = body.splitlines()
         assert len(lines) == 3 and lines[0] == "{" and lines[2] == "}", key + " 未展开为三行"
-        assert lines[1] and not lines[1].strip(), key + " 中间行未自动缩进"
+        assert lines[1] == "    ", key + " 中间行未按 C++ 四空格缩进: " + repr(lines[1])
 
 
 def main() -> None:
@@ -332,10 +362,10 @@ def main() -> None:
         page.goto("http://localhost:1420", wait_until="networkidle")
         table_case(page, out, args.verify)
         open_doc(page, "javascript.md")
-        enter_and_complete(page, out)
+        enter_without_completions(page, out)
         open_doc(page, "source-javascript.md")
         switch_mode(page, True)
-        enter_and_complete(page, out, True)
+        enter_without_completions(page, out, True)
         simple_enter(page, "python.md", "def main():", "python_enter")
         simple_enter(page, "html.md", "<div>", "html_enter")
         open_doc(page, "plain.md")
@@ -366,18 +396,20 @@ def main() -> None:
         ghost_escape_case(page, out, args.verify)
         brace_case(page, "cpp-brace.md", "cpp_brace_enter", out, False, False, args.verify)
         brace_case(page, "source-cpp-brace.md", "source_cpp_brace_enter", out, True, False, args.verify)
+        cpp_sample_case(page, "cpp-sample.md", "cpp_sample_enter", out, False, args.verify)
+        cpp_sample_case(page, "source-cpp-sample.md", "source_cpp_sample_enter", out, True, args.verify)
         brace_case(page, "cpp-space.md", "cpp_brace_space", out, False, True, args.verify)
         if args.verify:
             for key in ("rich_javascript", "source_javascript"):
                 item = results[key]
                 assert re.search(r"if \(true\) \{\n[ \t]+", item["afterEnter"]), key + " Enter 未自动缩进"
-                assert item["completionVisible"], key + " 未显示补全"
-                assert "function" in item["afterTab"], key + " Tab 未接受 function 补全"
-                assert "$0" not in item["afterTab"], key + " 片段残留了字面占位符"
-                assert "代码片段" in item["tooltipText"], key + " 未加载常用语言片段"
-                assert item["afterSecondTab"] == item["afterTab"], key + " 片段字段导航意外插入缩进"
-                assert "\t" not in item["afterTab"], key + " 片段仍包含 Tab 缩进"
-                assert "function name(params) {\n    \n  }" in item["afterTab"], key + " 片段未按每级 2 空格缩进"
+                assert not item["completionVisible"], key + " 仍弹出补全建议"
+                assert item["items"] == [] and item["tooltipText"] == "", key + " 补全列表未清空"
+                assert item["ghostVisible"] == 0, key + " 仍显示幽灵预览"
+                assert "function" not in item["afterTab"], key + " Tab 仍接受代码片段"
+                assert "if (true) {\n  fun\n}\n" in item["afterTab"], key + " 第一次 Tab 未作为两空格缩进"
+                assert "if (true) {\n    fun\n}\n" in item["afterSecondTab"], key + " 第二次 Tab 未继续缩进"
+                assert "\t" not in item["afterTab"], key + " Tab 输入包含制表符"
             assert re.search(r"def main\(\):\n[ \t]+", results["python_enter"]), "Python Enter 未自动缩进"
             assert re.search(r"<div>\n[ \t]+", results["html_enter"]), "HTML Enter 未自动缩进"
             assert re.search(r"\n[ \t]+x", tabbed), "无补全时 Tab 未缩进"
