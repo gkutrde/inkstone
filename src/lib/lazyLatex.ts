@@ -236,6 +236,7 @@ var _content, _provider, _dom, _innerView, _updateValue, _app, _onHide, _shouldS
 class LatexInlineTooltip {
   constructor(ctx, view, config) {
     this.ctx = ctx;
+    this.editingPos = -1;
     __privateAdd(this, _content);
     __privateAdd(this, _provider);
     __privateAdd(this, _dom);
@@ -244,6 +245,7 @@ class LatexInlineTooltip {
     }));
     __privateAdd(this, _app);
     __privateAdd(this, _onHide, () => {
+      this.editingPos = -1;
       if (__privateGet(this, _innerView).value) {
         __privateGet(this, _innerView).value.destroy();
         __privateGet(this, _innerView).value = null;
@@ -258,11 +260,36 @@ class LatexInlineTooltip {
         const node = selection.node;
         if (node.type.name !== mathInlineId) return false;
         const textFrom = selection.from;
+        const currentInner = __privateGet(this, _innerView).value;
+        if (
+          currentInner &&
+          this.editingPos === textFrom &&
+          currentInner.state.doc.textContent === node.attrs.value
+        ) {
+          return true;
+        }
+        __privateGet(this, _onHide).call(this);
         const paragraph = schema.nodes.paragraph.create(
           null,
           schema.text(node.attrs.value)
         );
-        const innerView = new EditorView(__privateGet(this, _dom), {
+        let innerView;
+        const commitValue = (restoreFocus = false) => {
+          const currentNode = view.state.doc.nodeAt(textFrom);
+          if (!currentNode || currentNode.type.name !== mathInlineId) return;
+          const value = innerView.state.doc.textContent;
+          if (currentNode.attrs.value !== value) {
+            const { tr } = view.state;
+            tr.setNodeAttribute(textFrom, "value", value);
+            view.dispatch(tr);
+          }
+          if (restoreFocus) {
+            requestAnimationFrame(() => {
+              view.focus();
+            });
+          }
+        };
+        innerView = new EditorView(__privateGet(this, _dom), {
           state: EditorState.create({
             doc: paragraph,
             schema: new Schema({
@@ -294,17 +321,15 @@ class LatexInlineTooltip {
                 }
               })
             ]
-          })
+          }),
+          dispatchTransaction: (tr) => {
+            innerView.updateState(innerView.state.apply(tr));
+            if (tr.docChanged) commitValue();
+          }
         });
+        this.editingPos = textFrom;
         __privateGet(this, _innerView).value = innerView;
-        __privateGet(this, _updateValue).value = () => {
-          const { tr } = view.state;
-          tr.setNodeAttribute(textFrom, "value", innerView.state.doc.textContent);
-          view.dispatch(tr);
-          requestAnimationFrame(() => {
-            view.focus();
-          });
-        };
+        __privateGet(this, _updateValue).value = () => commitValue(true);
         return true;
       };
       const show = shouldShow();

@@ -21,6 +21,7 @@
     "tauri": "tauri",
     "test:review": "python scripts/comprehensive-review-e2e.py && python scripts/replace-all-regression.py && python scripts/remaining-features-e2e.py && node scripts/recent-paths-regression.mjs",
     "test:markdown": "python scripts/markdown-syntax-e2e.py --label current",
+    "test:latex": "python scripts/latex-edit-e2e.py",
     "test:perf:source": "python scripts/perf/source_typing_e2e.py --model ascii && python scripts/perf/source_typing_e2e.py --model cjk"
   },
   "dependencies": {
