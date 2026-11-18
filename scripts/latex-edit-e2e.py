@@ -10,7 +10,7 @@ from playwright.sync_api import sync_playwright
 
 ROOT = Path(__file__).resolve().parent.parent
 DOC_NAME = "LaTeX 编辑回归.md"
-INITIAL_MARKDOWN = "Inline $E=mc^2$ end.\n\n$$\nx=1\n$$\n"
+INITIAL_MARKDOWN = "Inline $E=mc^2$ end.\n\n$$\nx=1\n$$\n\n$$\nsecond=2\n$$\n"
 
 
 def main() -> int:
@@ -61,6 +61,7 @@ def main() -> int:
         page.on("pageerror", lambda error: page_errors.append(str(error)))
         page.on("console", lambda message: console_errors.append(message.text) if message.type == "error" else None)
         if args.cdp:
+            page.wait_for_selector("#root", state="attached", timeout=30000)
             page.evaluate("workspace => localStorage.setItem('inkstone.workspace.v1', workspace)", str(workspace))
             page.reload(wait_until="networkidle")
         else:
@@ -68,6 +69,8 @@ def main() -> int:
         page.locator(".tree-row").filter(has_text=DOC_NAME).first.click()
         page.wait_for_selector(".milkdown .ProseMirror", timeout=30000)
         page.wait_for_timeout(1000)
+        blocks = page.locator(".milkdown-code-block").filter(has_text="LaTeX")
+        initial_block_katex_counts = [blocks.nth(i).locator(".katex").count() for i in range(blocks.count())]
         page.screenshot(path=str(out / f"{args.label}-before.png"))
 
         inline = page.locator('.milkdown .ProseMirror span[data-type="math_inline"]').first
@@ -90,7 +93,7 @@ def main() -> int:
             saved_during_edit = files.get(document_path, "")
 
         # 不额外按 Enter：直接点击别处也必须保留行内公式修改。
-        block = page.locator(".milkdown-code-block").filter(has_text="LaTeX").first
+        block = blocks.first
         block_editor = block.locator(".cm-content")
         block_editor.click()
         page.wait_for_timeout(300)
@@ -111,6 +114,7 @@ def main() -> int:
             saved = files.get(document_path, "")
         (out / f"{args.label}-roundtrip.md").write_text(saved, encoding="utf-8")
         result = {
+            "initialBlockKatexCounts": initial_block_katex_counts,
             "inlineValueDuringEdit": inline_value_during_edit,
             "savedDuringEdit": saved_during_edit,
             "inlineValue": inline_value,
@@ -122,11 +126,13 @@ def main() -> int:
         print(json.dumps(result, ensure_ascii=False, indent=2))
         browser.close()
 
+    assert initial_block_katex_counts == [1, 1], f"多个块级公式预览互相取消：{initial_block_katex_counts}"
     assert inline_value_during_edit == "y=x+1", "输入时行内公式节点未同步更新"
     assert "$y=x+1$" in saved_during_edit, "编辑框内直接保存丢失了行内公式修改"
     assert inline_value == "y=x+1", f"行内公式未更新：{inline_value!r}"
     assert "$y=x+1$" in saved, "行内公式修改未保存到 Markdown"
     assert "z=3" in saved and "x=1" not in saved, "块级公式修改未保存到 Markdown"
+    assert "second=2" in saved, "编辑一个块级公式时改动了另一个公式"
     assert not page_errors, f"页面异常：{page_errors}"
     return 0
 

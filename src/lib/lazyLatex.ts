@@ -443,19 +443,30 @@ const latex = (editor, config) => {
     });
   }).use(remarkMathPlugin).use(remarkMathBlockPlugin).use(mathInlineSchema).use(inlineLatexTooltip).use(mathInlineInputRule).use(mathBlockInputRule).use(blockLatexSchema).use(toggleLatexCommand);
 };
-let latexRenderRevision = 0;
+let katexRenderer = null;
+let katexLoadPromise = null;
 function renderLatex(content, applyPreview, options) {
-  const revision = ++latexRenderRevision;
-  void import("katex").then(({ default: katex }) => {
-    if (revision !== latexRenderRevision) return;
-    const html = katex.renderToString(content, {
-      ...options,
-      throwOnError: false,
-      displayMode: true
+  const render = (katex) => katex.renderToString(content, {
+    ...options,
+    throwOnError: false,
+    displayMode: true
+  });
+  if (katexRenderer) return render(katexRenderer);
+  if (!katexLoadPromise) {
+    katexLoadPromise = import("katex").then(({ default: katex }) => {
+      katexRenderer = katex;
+      return katex;
+    }).catch((error) => {
+      katexLoadPromise = null;
+      throw error;
     });
-    applyPreview(html);
+  }
+  // A shared loader settles callbacks in request order without letting one
+  // block cancel another block's independent applyPreview callback.
+  void katexLoadPromise.then((katex) => {
+    applyPreview(render(katex));
   }).catch(() => {
-    if (revision === latexRenderRevision) applyPreview("<pre>公式渲染器加载失败，请重试。</pre>");
+    applyPreview("<pre>公式渲染器加载失败，请重试。</pre>");
   });
 }
 
