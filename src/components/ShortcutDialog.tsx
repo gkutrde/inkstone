@@ -1,6 +1,7 @@
 import { useRef } from "react";
 import { X } from "./IosIcons";
 import { useModalA11y } from "../lib/useModalA11y";
+import { useAnimatedClose } from "../lib/useAnimatedClose";
 
 const groups = [
   {
@@ -36,14 +37,16 @@ const groups = [
 
 export default function ShortcutDialog({ onClose }: { onClose: () => void }) {
   const dialogRef = useRef<HTMLDivElement>(null);
-  useModalA11y(dialogRef, onClose);
+  const { closing, requestClose } = useAnimatedClose(onClose);
+  useModalA11y(dialogRef, requestClose);
   return (
-    <div className="modal-backdrop" onMouseDown={(event) => {
-      if (event.target === event.currentTarget) onClose();
+    <div className="modal-backdrop" data-state={closing ? "closing" : "open"} onMouseDown={(event) => {
+      if (event.target === event.currentTarget) requestClose();
     }}>
       <div
         ref={dialogRef}
         className="shortcut-dialog"
+        data-state={closing ? "closing" : "open"}
         role="dialog"
         aria-modal="true"
         aria-labelledby="shortcut-title"
@@ -54,7 +57,7 @@ export default function ShortcutDialog({ onClose }: { onClose: () => void }) {
             <h2 id="shortcut-title">键盘快捷键</h2>
             <p className="prompt-description">不用离开键盘，也能完成主要写作操作。</p>
           </div>
-          <button type="button" className="icon-button quiet" onClick={onClose} title="关闭">
+          <button type="button" className="icon-button quiet" onClick={requestClose} title="关闭">
             <X size={17} />
           </button>
         </div>

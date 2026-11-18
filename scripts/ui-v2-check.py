@@ -1,11 +1,16 @@
 
 from pathlib import Path
 from playwright.sync_api import sync_playwright
+import argparse
 import json
 
-OUT = Path(r"C:\Users\25088\Documents\Harness\反编译\analysis\ui-v2")
+parser = argparse.ArgumentParser(description="捕获 Inkstone 多场景视觉回归")
+parser.add_argument("--url", default="http://127.0.0.1:1420")
+parser.add_argument("--out", type=Path, default=Path(__file__).resolve().parent.parent.parent / "analysis" / "ui-v2")
+args = parser.parse_args()
+OUT = args.out
 OUT.mkdir(parents=True, exist_ok=True)
-BASE = "http://127.0.0.1:1420"
+BASE = args.url
 MOCK = (Path(__file__).resolve().parent / "perf" / "tauri_mock.js").read_text(encoding="utf-8")
 report = {"shots": [], "console": [], "errors": []}
 
@@ -93,6 +98,14 @@ with sync_playwright() as pw:
     shot(mp, "11-mobile-welcome")
     m.close()
 
+    page.set_viewport_size({"width": 1280, "height": 800})
+    page.wait_for_timeout(350)
+    shot(page, "12-laptop-editor")
+    page.set_viewport_size({"width": 980, "height": 640})
+    page.wait_for_timeout(350)
+    shot(page, "13-compact-editor")
+
     browser.close()
 
+(OUT / "report.json").write_text(json.dumps(report, ensure_ascii=False, indent=2), encoding="utf-8")
 print(json.dumps(report, ensure_ascii=False, indent=1))

@@ -130,12 +130,14 @@ try {
   check('command palette renders with accessible dialog', () => {
     const html = renderToString(React.createElement(CommandCenter, { actions: [{ id: 'new', label: '新建文稿', section: '文稿', icon: React.createElement(icons.PenLine), run: noop }], onClose: noop }));
     assert.ok(html.includes('role="dialog"'));
+    assert.ok(html.includes('data-state="open"'));
     assert.ok(html.includes('新建文稿'));
     assert.ok(html.includes('command-option-icon'));
   });
   check('prompt renders form controls', () => {
     const html = renderToString(React.createElement(PromptDialog, { request: { title: '新建工作区', onSubmit: noop }, onClose: noop }));
     assert.ok(html.includes('role="dialog"'));
+    assert.ok(html.includes('data-state="open"'));
     assert.ok(html.includes('prompt-input'));
   });
   check('all themes, responsive and accessibility CSS contracts', () => {
@@ -143,6 +145,13 @@ try {
     assert.ok(css.includes('.app.reduce-transparency'));
     assert.ok(css.includes('.app.is-focus .document-toolbar'));
     assert.ok(!css.includes('@import'));
+  });
+  check('Liquid Glass and iOS motion state contracts', () => {
+    for (const token of ['--glass-chrome', '--glass-panel', '--spring', 'ios-dialog-in', 'ios-dialog-out', 'ios-pop-out', 'data-state="closing"']) assert.ok(css.includes(token), token);
+    assert.ok(css.includes('Liquid Glass functional layer'));
+    assert.ok(appSource.includes('data-mode={activeTab.mode}'));
+    assert.ok(appSource.includes('useAnimatedPresence(exportOpen)'));
+    assert.ok(appSource.includes('useAnimatedPresence(settingsOpen)'));
   });
   check('app artwork is local SVG without executable or remote assets', () => {
     assert.ok(brand.includes('viewBox="0 0 128 128"'));
@@ -184,7 +193,7 @@ try {
     assert.ok(countText('今天是美好的一天。').words > 0);
   });
   await mkdir(path.join(root, 'docs'), { recursive: true });
-  const report = { passed: checks.length, failed: 0, checks, limitations: ['No browser layout or interaction verification: Windows process-pipe policy blocks Chromium.', 'Native Tauri filesystem, dialogs and acrylic were not executed.'] };
+  const report = { passed: checks.length, failed: 0, checks, limitations: ['This in-process file does not assert browser layout or native IPC.', 'Run ios-motion-e2e.py for browser motion and accessibility, then verify release WebView2 separately.'] };
   await writeFile(path.join(root, 'docs/ios-ui-check.json'), JSON.stringify(report, null, 2) + '\n');
   console.log(JSON.stringify({ passed: checks.length, failed: 0, report: 'docs/ios-ui-check.json' }));
 } finally {

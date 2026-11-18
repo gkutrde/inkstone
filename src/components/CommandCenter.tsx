@@ -2,6 +2,7 @@ import { useEffect, useMemo, useRef, useState, type ReactNode } from "react";
 import { Clock3, Command as CommandIcon, CornerDownLeft, Search } from "./IosIcons";
 import { useModalA11y } from "../lib/useModalA11y";
 import { isImeKeyEvent } from "../lib/keyboard";
+import { OVERLAY_EXIT_MS, prefersReducedMotion, useAnimatedClose } from "../lib/useAnimatedClose";
 
 export interface CommandAction {
   id: string;
@@ -54,7 +55,8 @@ export default function CommandCenter({ actions, onClose }: CommandCenterProps) 
   const [recent, setRecent] = useState<string[]>(loadRecent);
   const inputRef = useRef<HTMLInputElement>(null);
   const dialogRef = useRef<HTMLDivElement>(null);
-  useModalA11y(dialogRef, onClose, inputRef);
+  const { closing, requestClose } = useAnimatedClose(onClose);
+  useModalA11y(dialogRef, requestClose, inputRef);
 
   const ranked = useMemo(() => {
     const normalized = query.trim().toLocaleLowerCase().replace(/\s+/g, "");
@@ -88,20 +90,22 @@ export default function CommandCenter({ actions, onClose }: CommandCenterProps) 
     const next = [selected.action.id, ...recent.filter((id) => id !== selected.action.id)].slice(0, 4);
     setRecent(next);
     localStorage.setItem(RECENT_KEY, JSON.stringify(next));
-    onClose();
-    window.setTimeout(selected.action.run, 0);
+    requestClose();
+    // Do not mount a second modal beneath the command palette's exit layer.
+    window.setTimeout(selected.action.run, prefersReducedMotion() ? 0 : OVERLAY_EXIT_MS + 30);
   };
 
   const active = ranked[activeIndex];
   let previousSection = "";
 
   return (
-    <div className="command-backdrop" onMouseDown={(event) => {
-      if (event.target === event.currentTarget) onClose();
+    <div className="command-backdrop" data-state={closing ? "closing" : "open"} onMouseDown={(event) => {
+      if (event.target === event.currentTarget) requestClose();
     }}>
       <div
         ref={dialogRef}
         className="command-dialog"
+        data-state={closing ? "closing" : "open"}
         role="dialog"
         aria-modal="true"
         aria-label="命令中心"

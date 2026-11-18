@@ -1,6 +1,7 @@
 import { useEffect, useRef } from "react";
 import { ArrowDown, ArrowUp, Replace, X } from "./IosIcons";
 import { isImeKeyEvent } from "../lib/keyboard";
+import { useAnimatedClose } from "../lib/useAnimatedClose";
 
 interface FindBarProps {
   query: string;
@@ -30,6 +31,7 @@ export default function FindBar({
   onClose
 }: FindBarProps) {
   const inputRef = useRef<HTMLInputElement>(null);
+  const { closing, requestClose } = useAnimatedClose(onClose, 170);
 
   useEffect(() => {
     inputRef.current?.focus();
@@ -37,7 +39,7 @@ export default function FindBar({
   }, [focusSignal]);
 
   return (
-    <div className="find-bar" role="dialog" aria-label="查找和替换">
+    <div className="find-bar" data-state={closing ? "closing" : "open"} role="dialog" aria-label="查找和替换">
       <div className="find-row">
         <input
           ref={inputRef}
@@ -55,7 +57,7 @@ export default function FindBar({
             if (event.key === "Escape") {
               event.preventDefault();
               event.stopPropagation();
-              onClose();
+              requestClose();
             }
           }}
         />
@@ -66,7 +68,7 @@ export default function FindBar({
         <button className="icon-button quiet" title="下一处 (Enter)" onClick={onNext}>
           <ArrowDown size={15} />
         </button>
-        <button className="icon-button quiet" title="关闭 (Esc)" onClick={onClose}>
+        <button className="icon-button quiet" title="关闭 (Esc)" onClick={requestClose}>
           <X size={15} />
         </button>
       </div>
@@ -81,7 +83,7 @@ export default function FindBar({
             if (event.key === "Escape") {
               event.preventDefault();
               event.stopPropagation();
-              onClose();
+              requestClose();
             }
             if (event.key === "Enter" && (event.ctrlKey || event.metaKey)) {
               event.preventDefault();

@@ -2,6 +2,7 @@ import { useEffect, useRef, useState } from "react";
 import { X } from "./IosIcons";
 import { useModalA11y } from "../lib/useModalA11y";
 import { isImeKeyEvent } from "../lib/keyboard";
+import { useAnimatedClose } from "../lib/useAnimatedClose";
 
 export interface PromptRequest {
   title: string;
@@ -23,7 +24,8 @@ export default function PromptDialog({ request, onClose }: PromptDialogProps) {
   const [error, setError] = useState<string | null>(null);
   const inputRef = useRef<HTMLInputElement>(null);
   const dialogRef = useRef<HTMLFormElement>(null);
-  useModalA11y(dialogRef, onClose, inputRef);
+  const { closing, requestClose } = useAnimatedClose(onClose);
+  useModalA11y(dialogRef, requestClose, inputRef);
 
   useEffect(() => {
     setValue(request.initialValue ?? "");
@@ -35,6 +37,7 @@ export default function PromptDialog({ request, onClose }: PromptDialogProps) {
   }, [request]);
 
   const submit = async () => {
+    if (busy || closing) return;
     if (!value.trim()) {
       setError("名称不能为空。");
       return;
@@ -43,7 +46,7 @@ export default function PromptDialog({ request, onClose }: PromptDialogProps) {
     setError(null);
     try {
       await request.onSubmit(value.trim());
-      onClose();
+      requestClose();
     } catch (reason) {
       setError(reason instanceof Error ? reason.message : String(reason));
     } finally {
@@ -52,10 +55,11 @@ export default function PromptDialog({ request, onClose }: PromptDialogProps) {
   };
 
   return (
-    <div className="modal-backdrop" onMouseDown={onClose}>
+    <div className="modal-backdrop" data-state={closing ? "closing" : "open"} onMouseDown={requestClose}>
       <form
         ref={dialogRef}
         className="prompt-dialog"
+        data-state={closing ? "closing" : "open"}
         role="dialog"
         aria-modal="true"
         aria-labelledby="prompt-title"
@@ -70,7 +74,7 @@ export default function PromptDialog({ request, onClose }: PromptDialogProps) {
           <div>
             <h2 id="prompt-title">{request.title}</h2>
           </div>
-          <button type="button" className="icon-button quiet" onClick={onClose} title="关闭">
+          <button type="button" className="icon-button quiet" onClick={requestClose} title="关闭">
             <X size={17} />
           </button>
         </div>
@@ -93,7 +97,7 @@ export default function PromptDialog({ request, onClose }: PromptDialogProps) {
         />
         {error && <p className="prompt-error" id="prompt-error" role="alert">{error}</p>}
         <div className="prompt-actions">
-          <button type="button" className="text-button" onClick={onClose}>取消</button>
+          <button type="button" className="text-button" onClick={requestClose}>取消</button>
           <button type="submit" className="primary-button" disabled={busy}>
             {busy ? "处理中…" : (request.confirmLabel ?? "确认")}
           </button>

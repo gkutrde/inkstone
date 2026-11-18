@@ -6,6 +6,7 @@ import { getCurrentWindow } from "@tauri-apps/api/window";
 import WindowControls from "./components/WindowControls";
 import { syncDesktopGlass } from "./lib/windowGlass";
 import { isImeKeyEvent } from "./lib/keyboard";
+import { useAnimatedPresence } from "./lib/useAnimatedClose";
 import {
   AlertCircle,
   BookOpen,
@@ -244,6 +245,8 @@ export default function App() {
   const [replacement, setReplacement] = useState("");
   const [settingsOpen, setSettingsOpen] = useState(false);
   const [exportOpen, setExportOpen] = useState(false);
+  const exportPresence = useAnimatedPresence(exportOpen);
+  const settingsPresence = useAnimatedPresence(settingsOpen);
   const [commandOpen, setCommandOpen] = useState(false);
   const [shortcutsOpen, setShortcutsOpen] = useState(false);
   const [focusMode, setFocusMode] = useState(false);
@@ -1913,8 +1916,8 @@ export default function App() {
             >
               <Share size={17} /><span>导出</span>
             </button>
-            {exportOpen && (
-              <div className="popover export-menu" id="export-menu" role="menu" aria-label="导出当前文稿">
+            {exportPresence.present && (
+              <div className="popover export-menu" data-state={exportPresence.closing ? "closing" : "open"} id="export-menu" role="menu" aria-label="导出当前文稿">
                 <div className="export-menu-title">导出当前文稿</div>
                 <button role="menuitem" onClick={() => { setExportOpen(false); void exportDocx(); }}>
                   <FileType2 size={16} />
@@ -1957,8 +1960,8 @@ export default function App() {
             >
               <Settings2 size={17} />
             </button>
-            {settingsOpen && (
-              <div className="popover settings-popover" id="settings-popover" role="dialog" aria-label="偏好设置">
+            {settingsPresence.present && (
+              <div className="popover settings-popover" data-state={settingsPresence.closing ? "closing" : "open"} id="settings-popover" role="dialog" aria-label="偏好设置">
                 <div className="popover-title">偏好设置</div>
                 <span className="settings-label">主题</span>
                 <div className="theme-options">
@@ -2118,7 +2121,7 @@ export default function App() {
           {activeTab ? (
             <>
               <div className="document-toolbar">
-                <div className="mode-switch" role="group" aria-label="编辑模式">
+                <div className="mode-switch" data-mode={activeTab.mode} role="group" aria-label="编辑模式">
                   <button
                     className={activeTab.mode === "rich" ? "is-active" : ""}
                     aria-pressed={activeTab.mode === "rich"}
@@ -2316,7 +2319,7 @@ export default function App() {
                 <div className="starter-preview">
                   <div className="starter-preview-head">
                     <span className="starter-symbol"><PenLine size={19} /></span>
-                    <div><strong>写给今天的自己</strong><small>A LITTLE SPACE FOR YOUR MIND</small></div>
+                    <div><strong>写给今天的自己</strong><small>本地示例 · Markdown</small></div>
                     <FileText size={15} />
                   </div>
                   <h2>记录每一个<br />值得留下的瞬间。</h2>

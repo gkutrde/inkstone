@@ -1,5 +1,5 @@
 {
-  "passed": 75,
+  "passed": 79,
   "failed": 0,
   "checks": [
     {
@@ -16,6 +16,18 @@
     },
     {
       "name": "theme and editor controls expose selected states",
+      "passed": true
+    },
+    {
+      "name": "symbol AlignLeft",
+      "passed": true
+    },
+    {
+      "name": "symbol AlignCenter",
+      "passed": true
+    },
+    {
+      "name": "symbol AlignRight",
       "passed": true
     },
     {
@@ -283,6 +295,10 @@
       "passed": true
     },
     {
+      "name": "Liquid Glass and iOS motion state contracts",
+      "passed": true
+    },
+    {
       "name": "app artwork is local SVG without executable or remote assets",
       "passed": true
     },
@@ -304,7 +320,7 @@
     }
   ],
   "limitations": [
-    "No browser layout or interaction verification: Windows process-pipe policy blocks Chromium.",
-    "Native Tauri filesystem, dialogs and acrylic were not executed."
+    "This in-process file does not assert browser layout or native IPC.",
+    "Run ios-motion-e2e.py for browser motion and accessibility, then verify release WebView2 separately."
   ]
 }
