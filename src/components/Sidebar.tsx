@@ -22,7 +22,7 @@ import {
 import type { FileNode, SearchResponse } from "../types";
 import { searchWorkspace } from "../lib/api";
 import { baseName, normalizeSlashes } from "../lib/path";
-import { useModalA11y } from "../lib/useModalA11y";
+import { useMenuA11y } from "../lib/useMenuA11y";
 import { useAnimatedPresence } from "../lib/useAnimatedClose";
 
 interface SidebarProps {
@@ -163,7 +163,7 @@ export default function Sidebar({
   const menuRef = useRef<HTMLDivElement>(null);
   const menuPresence = useAnimatedPresence(Boolean(menu));
   const lastMenuRef = useRef<MenuState | null>(null);
-  useModalA11y(menuRef, () => setMenu(null), undefined, Boolean(menu));
+  useMenuA11y(menuRef, () => setMenu(null), Boolean(menu) && menuPresence.present);
 
   useEffect(() => {
     if (menu) lastMenuRef.current = menu;

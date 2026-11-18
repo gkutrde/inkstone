@@ -55,6 +55,7 @@ export default function CommandCenter({ actions, onClose }: CommandCenterProps) 
   const [recent, setRecent] = useState<string[]>(loadRecent);
   const inputRef = useRef<HTMLInputElement>(null);
   const dialogRef = useRef<HTMLDivElement>(null);
+  const resultsRef = useRef<HTMLDivElement>(null);
   const { closing, requestClose } = useAnimatedClose(onClose);
   useModalA11y(dialogRef, requestClose, inputRef);
 
@@ -83,6 +84,22 @@ export default function CommandCenter({ actions, onClose }: CommandCenterProps) 
   useEffect(() => {
     if (activeIndex >= ranked.length) setActiveIndex(Math.max(0, ranked.length - 1));
   }, [activeIndex, ranked.length]);
+  useEffect(() => {
+    const container = resultsRef.current;
+    const selected = ranked[activeIndex];
+    const option = selected ? document.getElementById("command-option-" + selected.action.id) : null;
+    if (!container || !option) return;
+    const optionTop = option.offsetTop;
+    const optionBottom = optionTop + option.offsetHeight;
+    const visibleTop = container.scrollTop;
+    const visibleBottom = visibleTop + container.clientHeight;
+    const style = window.getComputedStyle(container);
+    if (optionBottom > visibleBottom) {
+      container.scrollTop = optionBottom - container.clientHeight + Number.parseFloat(style.paddingBottom);
+    } else if (optionTop < visibleTop) {
+      container.scrollTop = Math.max(0, optionTop - Number.parseFloat(style.paddingTop));
+    }
+  }, [activeIndex, ranked]);
 
   const execute = (index: number) => {
     const selected = ranked[index];
@@ -144,7 +161,7 @@ export default function CommandCenter({ actions, onClose }: CommandCenterProps) 
           />
           <kbd>Ctrl K</kbd>
         </div>
-        <div className="command-results" id="command-listbox" role="listbox" aria-label="可用命令">
+        <div ref={resultsRef} className="command-results" id="command-listbox" role="listbox" aria-label="可用命令">
           {ranked.map((item, index) => {
             const section = item.isRecent ? "最近使用" : item.action.section;
             const showSection = section !== previousSection;

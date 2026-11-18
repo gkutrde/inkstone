@@ -7,6 +7,8 @@ import WindowControls from "./components/WindowControls";
 import { syncDesktopGlass } from "./lib/windowGlass";
 import { isImeKeyEvent } from "./lib/keyboard";
 import { useAnimatedPresence } from "./lib/useAnimatedClose";
+import { useMenuA11y } from "./lib/useMenuA11y";
+import { useModalA11y } from "./lib/useModalA11y";
 import {
   AlertCircle,
   BookOpen,
@@ -247,6 +249,10 @@ export default function App() {
   const [exportOpen, setExportOpen] = useState(false);
   const exportPresence = useAnimatedPresence(exportOpen);
   const settingsPresence = useAnimatedPresence(settingsOpen);
+  const exportMenuRef = useRef<HTMLDivElement>(null);
+  const settingsPopoverRef = useRef<HTMLDivElement>(null);
+  useMenuA11y(exportMenuRef, () => setExportOpen(false), exportOpen && exportPresence.present);
+  useModalA11y(settingsPopoverRef, () => setSettingsOpen(false), undefined, settingsOpen && settingsPresence.present);
   const [commandOpen, setCommandOpen] = useState(false);
   const [shortcutsOpen, setShortcutsOpen] = useState(false);
   const [focusMode, setFocusMode] = useState(false);
@@ -1926,7 +1932,7 @@ export default function App() {
               <Share size={17} /><span>导出</span>
             </button>
             {exportPresence.present && (
-              <div className="popover export-menu" data-state={exportPresence.closing ? "closing" : "open"} id="export-menu" role="menu" aria-label="导出当前文稿">
+              <div ref={exportMenuRef} className="popover export-menu" data-state={exportPresence.closing ? "closing" : "open"} id="export-menu" role="menu" aria-label="导出当前文稿" tabIndex={-1}>
                 <div className="export-menu-title">导出当前文稿</div>
                 <button role="menuitem" onClick={() => { setExportOpen(false); void exportDocx(); }}>
                   <FileType2 size={16} />
@@ -1970,7 +1976,7 @@ export default function App() {
               <Settings2 size={17} />
             </button>
             {settingsPresence.present && (
-              <div className="popover settings-popover" data-state={settingsPresence.closing ? "closing" : "open"} id="settings-popover" role="dialog" aria-label="偏好设置">
+              <div ref={settingsPopoverRef} className="popover settings-popover" data-state={settingsPresence.closing ? "closing" : "open"} id="settings-popover" role="dialog" aria-label="偏好设置" tabIndex={-1}>
                 <div className="popover-title">偏好设置</div>
                 <span className="settings-label">主题</span>
                 <div className="theme-options">

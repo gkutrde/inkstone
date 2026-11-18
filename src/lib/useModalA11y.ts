@@ -55,7 +55,8 @@ export function useModalA11y(
     return () => {
       window.cancelAnimationFrame(frame);
       document.removeEventListener("keydown", onKeyDown, true);
-      previous?.focus();
+      const active = document.activeElement;
+      if (containerRef.current?.contains(active) || active === document.body) previous?.focus();
     };
   }, [containerRef, initialFocusRef, enabled]);
 }

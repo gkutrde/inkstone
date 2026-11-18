@@ -19,6 +19,7 @@
     "preview": "vite preview",
     "test:ui": "node scripts/ios-ui-check.mjs",
     "test:ios:motion": "python scripts/ios-motion-e2e.py",
+    "test:commercial": "python scripts/commercial-ux-e2e.py",
     "tauri": "tauri",
     "test:review": "python scripts/comprehensive-review-e2e.py && python scripts/replace-all-regression.py && python scripts/remaining-features-e2e.py && node scripts/recent-paths-regression.mjs",
     "test:markdown": "python scripts/markdown-syntax-e2e.py --label current",

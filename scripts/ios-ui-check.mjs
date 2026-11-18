@@ -172,6 +172,8 @@ try {
     assert.ok(appSource.includes('data-mode={activeTab.mode}'));
     assert.ok(appSource.includes('useAnimatedPresence(exportOpen)'));
     assert.ok(appSource.includes('useAnimatedPresence(settingsOpen)'));
+    assert.ok(appSource.includes('useMenuA11y(exportMenuRef'));
+    assert.ok(appSource.includes('useModalA11y(settingsPopoverRef'));
   });
   check('app artwork is local SVG without executable or remote assets', () => {
     assert.ok(brand.includes('viewBox="0 0 128 128"'));
