@@ -55,6 +55,7 @@ Inkstone 是本地优先的 Markdown 写作工作台。前端目标不是复制�
 - 交互动效区分来源：按钮 100–140ms 按压回弹，分段滑块与选中态 180–240ms 连续过渡，弹层和命令中心使用轻微过冲的进出场，Toast 轻量浮入。输入、滚动和正文布局不做装饰动画。
 - `useAnimatedClose.ts` 统一外部开关的 presence 与用户关闭的幂等生命周期；命令退场后再执行下一动作，避免模态重叠。减少动态效果立即完成状态切换，减少透明效果使用实心高对比表面。
 - 视觉基线使用 `scripts/ui-v2-check.py` 同场景 Before/After；动效、焦点与降级由 `scripts/ios-motion-e2e.py` 验证。
+- 无工作区侧栏只保留一个“选择文件夹”主动作；Toast 和文件树菜单保留最后内容直到退场结束。真实触屏指针的主要目标至少 44px，`prefers-contrast` 与 Windows forced-colors 使用不透明表面和系统高对比色。
 
 ### 表格交互与紧凑内容块
 

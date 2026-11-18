@@ -1,5 +1,5 @@
 {
-  "passed": 79,
+  "passed": 81,
   "failed": 0,
   "checks": [
     {
@@ -279,6 +279,10 @@
       "passed": true
     },
     {
+      "name": "empty workspace offers one direct folder action",
+      "passed": true
+    },
+    {
       "name": "outline preserves structure and stats",
       "passed": true
     },
@@ -288,6 +292,10 @@
     },
     {
       "name": "prompt renders form controls",
+      "passed": true
+    },
+    {
+      "name": "toast exposes stable live-region motion state",
       "passed": true
     },
     {

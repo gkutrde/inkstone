@@ -122,6 +122,73 @@ def main() -> int:
         assert closing_seen(page), "快捷键弹层缺少 closing 退场状态"
         checks.append("快捷键弹层退场与焦点管理")
 
+        seeded = browser.new_context(viewport={"width": 1280, "height": 800})
+        seed = (
+            "window.__PERF_FS = " + json.dumps({"C:/motion/workspace/note.md": "# Note\n\nSaved text."}) + ";"
+            "window.__PERF_WORKSPACE = 'C:/motion/workspace';"
+            "localStorage.setItem('inkstone.workspace.v1', 'C:/motion/workspace');"
+        )
+        seeded.add_init_script(seed + chr(10) + mock)
+        sp = seeded.new_page()
+        sp.goto(args.url, wait_until="networkidle")
+        row = sp.locator(".tree-row").filter(has_text="note.md").first
+        row.click(button="right")
+        sp.wait_for_selector('.context-menu[data-state="open"]')
+        observe_closing(sp, ".context-menu")
+        sp.keyboard.press("Escape")
+        sp.wait_for_selector(".context-menu", state="detached", timeout=2000)
+        assert closing_seen(sp), "文件树菜单缺少 closing 退场状态"
+        checks.append("文件树菜单保留内容并完成退场")
+
+        row.click()
+        sp.wait_for_selector(".milkdown .ProseMirror", timeout=20000)
+        save = sp.locator("button[title='保存 (Ctrl+S)']")
+        save.click()
+        sp.wait_for_selector('.toast.success[data-state="open"]')
+        observe_closing(sp, ".toast")
+        sp.locator(".toast-close").click()
+        sp.wait_for_selector(".toast", state="detached", timeout=2000)
+        assert closing_seen(sp), "Toast 手动关闭缺少退场状态"
+        save.click()
+        sp.wait_for_selector('.toast.success[data-state="open"]')
+        observe_closing(sp, ".toast")
+        sp.wait_for_selector(".toast", state="detached", timeout=6000)
+        assert closing_seen(sp), "Toast 自动消失缺少退场状态"
+        checks.append("Toast 手动与自动关闭均有完整退场")
+        seeded.close()
+
+        forced = browser.new_context(viewport={"width": 1280, "height": 800}, forced_colors="active")
+        forced.add_init_script(mock)
+        fp = forced.new_page()
+        fp.goto(args.url, wait_until="networkidle")
+        fp.wait_for_selector(".sidebar")
+        assert fp.evaluate("() => getComputedStyle(document.querySelector('.sidebar')).backdropFilter === 'none'")
+        checks.append("Windows 强制颜色模式移除透明材质")
+        forced.close()
+
+        touch = browser.new_context(
+            viewport={"width": 420, "height": 860},
+            has_touch=True,
+            is_mobile=True,
+        )
+        touch.add_init_script(mock)
+        tp = touch.new_page()
+        tp.goto(args.url, wait_until="networkidle")
+        assert tp.evaluate("() => matchMedia('(pointer: coarse)').matches")
+        tp.locator(".welcome-actions .primary-button").click()
+        tp.wait_for_selector(".milkdown .ProseMirror", timeout=20000)
+        targets = tp.evaluate("""() => [...document.querySelectorAll('.command-trigger, .header-actions .icon-button, .window-control, .mode-switch button, .document-actions .icon-button')]
+          .filter(element => element.getClientRects().length)
+          .map(element => {
+            const rect = element.getBoundingClientRect();
+            return { name: element.innerText || element.title, width: rect.width, height: rect.height };
+          })""")
+        undersized = [target for target in targets if target["width"] < 44 or target["height"] < 44]
+        assert not undersized, f"触屏主要目标不足 44px：{undersized}"
+        assert tp.evaluate("() => document.documentElement.scrollWidth <= innerWidth"), "触屏布局出现横向溢出"
+        checks.append("触屏主要目标至少 44px 且无横向溢出")
+        touch.close()
+
         reduced = browser.new_context(
             viewport={"width": 1280, "height": 800},
             reduced_motion="reduce",

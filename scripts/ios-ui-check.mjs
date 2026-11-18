@@ -32,6 +32,7 @@ try {
   const { default: Outline } = await server.ssrLoadModule('/src/components/Outline.tsx');
   const { default: CommandCenter } = await server.ssrLoadModule('/src/components/CommandCenter.tsx');
   const { default: PromptDialog } = await server.ssrLoadModule('/src/components/PromptDialog.tsx');
+  const { default: ToastNotification } = await server.ssrLoadModule('/src/components/ToastNotification.tsx');
   const { extractOutline, countText } = await server.ssrLoadModule('/src/lib/metrics.ts');
   const { splitFrontmatter, restoreFrontmatter } = await server.ssrLoadModule('/src/lib/frontmatter.ts');
   const { loadDrafts, persistDrafts } = await server.ssrLoadModule('/src/lib/drafts.ts');
@@ -122,6 +123,18 @@ try {
     assert.ok(html.includes('sidebar-compose'));
     assert.ok(html.includes('sidebar-storage'));
   });
+  check('empty workspace offers one direct folder action', () => {
+    const html = renderToString(React.createElement(Sidebar, {
+      workspace: null, tree: [], activePath: null,
+      onOpenFolder: noop, onNewDocument: noop, onPickFile: noop, onOpenFile: noop,
+      onRefresh: noop, onCreateFile: noop, onCreateFolder: noop, onRename: noop,
+      onTrash: noop, onReveal: noop, onClose: noop
+    }));
+    assert.ok(html.includes('连接一个文件夹'));
+    assert.ok(html.includes('选择文件夹'));
+    assert.ok(!html.includes('本地工作区'));
+    assert.ok(!html.includes('打开工作区'));
+  });
   check('outline preserves structure and stats', () => {
     const html = renderToString(React.createElement(Outline, { items: [{ text: '章节', level: 2, line: 3 }], onJump: noop, onClose: noop, wordCount: 128, minutes: 1 }));
     assert.ok(html.includes('outline-item level-2'));
@@ -140,14 +153,21 @@ try {
     assert.ok(html.includes('data-state="open"'));
     assert.ok(html.includes('prompt-input'));
   });
+  check('toast exposes stable live-region motion state', () => {
+    const html = renderToString(React.createElement(ToastNotification, { toast: { message: '已保存', kind: 'success' }, onClose: noop }));
+    assert.ok(html.includes('role="status"'));
+    assert.ok(html.includes('data-state="open"'));
+    assert.ok(html.includes('已保存'));
+    assert.equal(renderToString(React.createElement(ToastNotification, { toast: null, onClose: noop })), '');
+  });
   check('all themes, responsive and accessibility CSS contracts', () => {
-    for (const selector of ['html[data-theme="sepia"]', 'html[data-theme="night"]', '@media (max-width: 760px)', '@media (max-width: 400px)', '@media (prefers-reduced-motion: reduce)', '@media (prefers-reduced-transparency: reduce)', '@media print']) assert.ok(css.includes(selector), selector);
+    for (const selector of ['html[data-theme="sepia"]', 'html[data-theme="night"]', '@media (max-width: 760px)', '@media (max-width: 400px)', '@media (pointer: coarse)', '@media (prefers-contrast: more)', '@media (forced-colors: active)', '@media (prefers-reduced-motion: reduce)', '@media (prefers-reduced-transparency: reduce)', '@media print']) assert.ok(css.includes(selector), selector);
     assert.ok(css.includes('.app.reduce-transparency'));
     assert.ok(css.includes('.app.is-focus .document-toolbar'));
     assert.ok(!css.includes('@import'));
   });
   check('Liquid Glass and iOS motion state contracts', () => {
-    for (const token of ['--glass-chrome', '--glass-panel', '--spring', 'ios-dialog-in', 'ios-dialog-out', 'ios-pop-out', 'data-state="closing"']) assert.ok(css.includes(token), token);
+    for (const token of ['--glass-chrome', '--glass-panel', '--spring', 'ios-dialog-in', 'ios-dialog-out', 'ios-pop-out', 'ios-toast-out', 'data-state="closing"']) assert.ok(css.includes(token), token);
     assert.ok(css.includes('Liquid Glass functional layer'));
     assert.ok(appSource.includes('data-mode={activeTab.mode}'));
     assert.ok(appSource.includes('useAnimatedPresence(exportOpen)'));

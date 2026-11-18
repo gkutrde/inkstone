@@ -23,6 +23,7 @@ import type { FileNode, SearchResponse } from "../types";
 import { searchWorkspace } from "../lib/api";
 import { baseName, normalizeSlashes } from "../lib/path";
 import { useModalA11y } from "../lib/useModalA11y";
+import { useAnimatedPresence } from "../lib/useAnimatedClose";
 
 interface SidebarProps {
   workspace: string | null;
@@ -160,7 +161,14 @@ export default function Sidebar({
   const [searchNonce, setSearchNonce] = useState(0);
   const [menu, setMenu] = useState<MenuState | null>(null);
   const menuRef = useRef<HTMLDivElement>(null);
+  const menuPresence = useAnimatedPresence(Boolean(menu));
+  const lastMenuRef = useRef<MenuState | null>(null);
   useModalA11y(menuRef, () => setMenu(null), undefined, Boolean(menu));
+
+  useEffect(() => {
+    if (menu) lastMenuRef.current = menu;
+  }, [menu]);
+  const visibleMenu = menu ?? lastMenuRef.current;
 
   const workspaceName = workspace ? baseName(workspace) : "未打开工作区";
   const visibleNodes = useMemo(() => flattenVisible(tree, expanded), [tree, expanded]);
@@ -348,11 +356,13 @@ export default function Sidebar({
         <button className="sidebar-compose" onClick={onNewDocument}><Pencil size={17} /> 新建文稿</button>
         <button className="sidebar-open" onClick={onPickFile}><FileText size={16} /> 打开文件 <kbd>Ctrl O</kbd></button>
       </div>
-      <div className="workspace-label">
-        <Folder size={21} />
-        <div><strong title={workspace ?? undefined}>{workspace ? workspaceName : "本地工作区"}</strong><small>{workspace ? "文件与灵感，都在这里" : "连接一个文件夹，开始整理"}</small></div>
-        <button className="icon-button quiet small" title="选择工作区" onClick={onOpenFolder}><ChevronRight size={14} /></button>
-      </div>
+      {workspace && (
+        <div className="workspace-label">
+          <Folder size={21} />
+          <div><strong title={workspace}>{workspaceName}</strong><small>文件与灵感，都在这里</small></div>
+          <button className="icon-button quiet small" title="选择工作区" onClick={onOpenFolder}><ChevronRight size={14} /></button>
+        </div>
+      )}
 
       {workspace ? (
         <>
@@ -449,54 +459,57 @@ export default function Sidebar({
         </>
       ) : (
         <div className="sidebar-empty">
-          <div className="sidebar-empty-mark"><FolderOpen size={30} strokeWidth={1.2} /></div>
-          <h2>把灵感整理在一起</h2>
-          <p>连接本地文件夹，让每一篇文稿都有自己的位置。</p>
-          <button className="primary-button" onClick={onOpenFolder}>打开文件夹</button>
+          <div className="sidebar-empty-mark"><FolderOpen size={26} strokeWidth={1.4} /></div>
+          <h2>连接一个文件夹</h2>
+          <p>浏览、搜索并管理其中的 Markdown 文稿。</p>
+          <button className="primary-button" onClick={onOpenFolder}>选择文件夹</button>
         </div>
       )}
 
       <div className="sidebar-storage">
         <ShieldCheck size={19} />
-        <div><strong>只属于你的文字</strong><small>文件保存在本机，无需上传</small></div>
+        <div><strong>本地优先</strong><small>文稿与设置仅保存在本机</small></div>
       </div>
 
       <div className="sidebar-footer">
-        <button className="open-folder-link" onClick={onOpenFolder}>
-          <FolderOpen size={14} />
-          {workspace ? "切换工作区" : "打开工作区"}
-        </button>
+        {workspace && (
+          <button className="open-folder-link" onClick={onOpenFolder}>
+            <FolderOpen size={14} />
+            切换工作区
+          </button>
+        )}
         <span className="local-note"><HardDrive size={12} />本地存储</span>
       </div>
 
-      {menu && (
+      {menuPresence.present && visibleMenu && (
         <div
           ref={menuRef}
           className="context-menu"
-          style={{ left: menu.x, top: menu.y }}
+          data-state={menuPresence.closing ? "closing" : "open"}
+          style={{ left: visibleMenu.x, top: visibleMenu.y }}
           role="menu"
-          aria-label={"操作：" + menu.node.name}
+          aria-label={"操作：" + visibleMenu.node.name}
           tabIndex={-1}
           onMouseDown={(event) => event.stopPropagation()}
         >
-          <div className="context-menu-title">{menu.node.name}</div>
-          {menu.node.isDir && (
+          <div className="context-menu-title">{visibleMenu.node.name}</div>
+          {visibleMenu.node.isDir && (
             <>
-              <button role="menuitem" onClick={() => { onCreateFile(menu.node.path); setMenu(null); }}>
+              <button role="menuitem" onClick={() => { onCreateFile(visibleMenu.node.path); setMenu(null); }}>
                 <FilePlus2 size={14} /> 新建文稿
               </button>
-              <button role="menuitem" onClick={() => { onCreateFolder(menu.node.path); setMenu(null); }}>
+              <button role="menuitem" onClick={() => { onCreateFolder(visibleMenu.node.path); setMenu(null); }}>
                 <FolderPlus size={14} /> 新建文件夹
               </button>
             </>
           )}
-          <button role="menuitem" onClick={() => { onRename(menu.node); setMenu(null); }}>
+          <button role="menuitem" onClick={() => { onRename(visibleMenu.node); setMenu(null); }}>
             <Pencil size={14} /> 重命名
           </button>
-          <button role="menuitem" onClick={() => { onReveal(menu.node); setMenu(null); }}>
+          <button role="menuitem" onClick={() => { onReveal(visibleMenu.node); setMenu(null); }}>
             <ExternalLink size={14} /> 在资源管理器中显示
           </button>
-          <button role="menuitem" className="danger" onClick={() => { onTrash(menu.node); setMenu(null); }}>
+          <button role="menuitem" className="danger" onClick={() => { onTrash(visibleMenu.node); setMenu(null); }}>
             <Trash2 size={14} /> 移到回收站
           </button>
         </div>

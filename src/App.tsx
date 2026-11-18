@@ -20,7 +20,6 @@ import {
   FileType2,
   FolderOpen,
   FolderPlus,
-  Info,
   Keyboard,
   Maximize2,
   Minimize2,
@@ -50,6 +49,7 @@ import SourceEditor from "./components/SourceEditor";
 import type { SourceEditorHandle } from "./components/SourceEditor";
 import CommandCenter, { type CommandAction } from "./components/CommandCenter";
 import ShortcutDialog from "./components/ShortcutDialog";
+import ToastNotification from "./components/ToastNotification";
 import PromptDialog, { type PromptRequest } from "./components/PromptDialog";
 import type {
   EditorMode,
@@ -430,7 +430,16 @@ export default function App() {
   const showToast = (message: string, kind: ToastState["kind"] = "info") => {
     setToast({ message, kind });
     if (toastTimer.current) window.clearTimeout(toastTimer.current);
-    toastTimer.current = window.setTimeout(() => setToast(null), kind === "error" ? 6500 : 3200);
+    toastTimer.current = window.setTimeout(() => {
+      toastTimer.current = null;
+      setToast(null);
+    }, kind === "error" ? 6500 : 3200);
+  };
+
+  const dismissToast = () => {
+    if (toastTimer.current) window.clearTimeout(toastTimer.current);
+    toastTimer.current = null;
+    setToast(null);
   };
 
   const patchSettings = (patch: Partial<Settings>) => {
@@ -2384,17 +2393,7 @@ export default function App() {
         )}
       </div>
 
-      {toast && (
-        <div className={"toast " + toast.kind} role={toast.kind === "error" ? "alert" : "status"} aria-live={toast.kind === "error" ? "assertive" : "polite"}>
-          <span className="toast-icon">
-            {toast.kind === "success" ? <CheckCircle2 size={16} /> : toast.kind === "error" ? <AlertCircle size={16} /> : <Info size={16} />}
-          </span>
-          <span className="toast-message">{toast.message}</span>
-          <button className="toast-close" aria-label="关闭通知" onClick={() => setToast(null)}>
-            <X size={13} />
-          </button>
-        </div>
-      )}
+      <ToastNotification toast={toast} onClose={dismissToast} />
 
       {(busy || exporting) && (
         <>
